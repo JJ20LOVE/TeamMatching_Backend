@@ -1,14 +1,18 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.utils.JwtUtils;
+import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
 import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
+import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.service.AuthService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -104,6 +108,31 @@ public class AuthController {
             throw e;
         }
     }
+    
+    /**
+     * 密码登录接口
+     * @param loginRequest 登录请求参数
+     * @return 登录响应信息
+     */
+    @PostMapping("/login")
+    @ApiOperation(value = "密码登录", notes = "通过账号和密码进行登录")
+    public ResponseEntity<RegisterResponse> login(
+            @ApiParam(value = "登录请求参数", required = true)
+            @Valid @RequestBody LoginRequest loginRequest) {
+        
+        log.info("收到登录请求: account={}", loginRequest.getAccount());
+        
+        try {
+            RegisterResponse response = authService.login(loginRequest);
+            log.info("登录成功: userId={}", response.getUserId());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("登录失败: account={}, error={}", loginRequest.getAccount(), e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+
     
     // 其他认证相关API
 }

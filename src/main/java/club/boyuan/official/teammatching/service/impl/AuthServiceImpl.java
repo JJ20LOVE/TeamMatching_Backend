@@ -5,6 +5,7 @@ import club.boyuan.official.teammatching.common.enums.AuthStatusEnum;
 import club.boyuan.official.teammatching.common.utils.JwtUtils;
 import club.boyuan.official.teammatching.common.utils.RedisUtils;
 import club.boyuan.official.teammatching.common.utils.SecurityUtils;
+import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 /**
  * 认证服务实现
@@ -157,6 +159,40 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
     
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public RegisterResponse login(LoginRequest loginRequest) {
+        log.info("开始处理用户登录请求，账号: {}", loginRequest.getAccount());
+        
+        // 1. 根据账号查找用户
+        User user = findUserByAccount(loginRequest.getAccount());
+        
+        // 2. 校验密码
+        validatePassword(loginRequest.getPassword(), user.getPassword());
+        
+        // 3. 检查用户状态
+        validateUserStatus(user);
+        
+        // 4. 更新用户登录信息
+        updateUserLoginInfo(user.getUserId());
+        
+        // 5. 生成JWT令牌
+        String token = JwtUtils.generateToken(user.getUserId());
+        
+        // 6. 将令牌存储到Redis
+        storeTokenToRedis(user.getUserId(), token);
+        
+        // 7. 构造响应
+        RegisterResponse response = new RegisterResponse();
+        response.setUserId(user.getUserId());
+        response.setToken(token);
+        response.setExpiresIn(JwtUtils.getExpirationTimeInSeconds());
+        response.setAuthStatus(user.getAuthStatus());
+        
+        log.info("用户登录成功，用户ID: {}", user.getUserId());
+        return response;
+    }
+    
     /**
      * 检查发送频率限制
      */
@@ -278,6 +314,60 @@ public class AuthServiceImpl implements AuthService {
     }
     
     /**
+     * 根据账号查找用户
+     */
+    private User findUserByAccount(String account) {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        
+        if (SecurityUtils.isEmail(account)) {
+            queryWrapper.eq("email", account);
+        } else if (SecurityUtils.isPhone(account)) {
+            queryWrapper.eq("phone", account);
+        } else {
+            // 学号查询
+            queryWrapper.eq("student_id", account);
+        }
+        
+        User user = userMapper.selectOne(queryWrapper);
+        if (user == null) {
+            throw new BusinessException("账号不存在");
+        }
+        
+        return user;
+    }
+    
+    /**
+     * 校验密码
+     */
+    private void validatePassword(String rawPassword, String encodedPassword) {
+        if (!SecurityUtils.verifyPassword(rawPassword, encodedPassword)) {
+            throw new BusinessException("密码错误");
+        }
+    }
+    
+    /**
+     * 检查用户状态
+     */
+    private void validateUserStatus(User user) {
+        if (user.getStatus() == null || user.getStatus()) {
+            throw new BusinessException("账号已被冻结");
+        }
+    }
+    
+    /**
+     * 更新用户登录信息
+     */
+    private void updateUserLoginInfo(Integer userId) {
+        User user = new User();
+        user.setUserId(userId);
+        user.setLastLoginTime(LocalDateTime.now());
+        user.setLoginCount(user.getLoginCount() != null ? user.getLoginCount() + 1 : 1);
+        user.setUpdateTime(LocalDateTime.now());
+        
+        userMapper.updateById(user);
+    }
+    
+    /**
      * 调用微信接口获取session_key和openid
      */
     private WxSessionResult getSessionKey(String code) {
@@ -368,17 +458,68 @@ public class AuthServiceImpl implements AuthService {
         return newUser;
     }
     
-    /**
-     * 更新用户登录信息
-     */
-    private void updateUserLoginInfo(Integer userId) {
+    @Override
+    public RegisterResponse refreshToken(String oldToken) {
+        log.info("开始处理Token刷新请求");
+        
+        // 1. 验证旧Token
+        if (!JwtUtils.validateToken(oldToken)) {
+            throw new BusinessException("无效的访问令牌");
+        }
+        
+        // 2. 获取用户ID
+        Integer userId = JwtUtils.getUserIdFromToken(oldToken);
+        
+        // 3. 检查旧Token是否在Redis中存在
+        String oldTokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
+        String storedOldToken = (String) redisUtils.get(oldTokenKey);
+        if (!Objects.equals(storedOldToken, oldToken)) {
+            throw new BusinessException("令牌已失效，无法刷新");
+        }
+        
+        // 4. 查询用户信息
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        // 5. 检查用户状态
+        if (user.getStatus() == null || user.getStatus()) {
+            throw new BusinessException("账号已被冻结");
+        }
+        
+        // 6. 生成新的Token
+        String newToken = JwtUtils.generateToken(userId);
+        
+        // 7. 更新Redis中的Token
+        storeTokenToRedis(userId, newToken);
+        
+        // 8. 构造响应
+        RegisterResponse response = new RegisterResponse();
+        response.setUserId(userId);
+        response.setToken(newToken);
+        response.setExpiresIn(JwtUtils.getExpirationTimeInSeconds());
+        response.setAuthStatus(user.getAuthStatus());
+        
+        log.info("Token刷新成功，用户ID: {}", userId);
+        return response;
+    }
+    
+    @Override
+    public void logout(Integer userId) {
+        log.info("开始处理用户登出请求，用户ID: {}", userId);
+        
+        // 1. 从Redis中删除Token
+        String tokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
+        redisUtils.del(tokenKey);
+        
+        // 2. 清除用户登录相关信息（可选）
         User user = new User();
         user.setUserId(userId);
-        user.setLastLoginTime(LocalDateTime.now());
-        user.setLoginCount(user.getLoginCount() != null ? user.getLoginCount() + 1 : 1);
         user.setUpdateTime(LocalDateTime.now());
-        
         userMapper.updateById(user);
+        
+        log.info("用户登出成功，用户ID: {}", userId);
     }
     
     /**
