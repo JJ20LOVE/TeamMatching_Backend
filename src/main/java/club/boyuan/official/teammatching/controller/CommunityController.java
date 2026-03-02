@@ -1,11 +1,34 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
+import club.boyuan.official.teammatching.service.CommunityService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 社区相关控制器
  */
 @RestController
+@RequestMapping("/community")
 public class CommunityController {
-    // 社区相关API
+
+    // 1. 使用 final 关键字，确保 Service 在初始化后不会被篡改
+    private final CommunityService communityService;
+
+    // 2. 构造器注入：Spring 会自动寻找 CommunityService 的实现类并注入
+    public CommunityController(CommunityService communityService) {
+        this.communityService = communityService;
+    }
+    @PostMapping("/post")
+    public ResponseEntity<Void> createPost(@Valid @RequestBody CreatePostRequest request) {
+        // 模拟从 JWT 中获取当前登录用户 ID（暂时写死，之后从 SecurityContext 获取）
+        Integer currentUserId = 34343333;
+        communityService.createNewPost(request, currentUserId);
+        // 调用 Service 执行发布逻辑
+        return ResponseEntity.ok().build();
+    }
 }
