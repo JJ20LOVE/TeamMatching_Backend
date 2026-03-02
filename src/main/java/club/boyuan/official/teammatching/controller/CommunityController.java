@@ -1,6 +1,7 @@
 package club.boyuan.official.teammatching.controller;
 
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
+import club.boyuan.official.teammatching.dto.response.community.PostDetailResponse;
 import club.boyuan.official.teammatching.service.CommunityService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -24,11 +25,12 @@ public class CommunityController {
         this.communityService = communityService;
     }
     @PostMapping("/post")
-    public ResponseEntity<Void> createPost(@Valid @RequestBody CreatePostRequest request) {
+    public PostDetailResponse<PostDetailResponse.PostCreateVO> createPost(@Valid @RequestBody CreatePostRequest request) {
         // 模拟从 JWT 中获取当前登录用户 ID（暂时写死，之后从 SecurityContext 获取）
         Integer currentUserId = 34343333;
-        communityService.createNewPost(request, currentUserId);
+        Long newPostId = communityService.createNewPost(request, currentUserId);
+        PostDetailResponse.PostCreateVO vo = new PostDetailResponse.PostCreateVO(newPostId, "发布成功，待审核");
         // 调用 Service 执行发布逻辑
-        return ResponseEntity.ok().build();
+        return PostDetailResponse.success(vo);
     }
 }

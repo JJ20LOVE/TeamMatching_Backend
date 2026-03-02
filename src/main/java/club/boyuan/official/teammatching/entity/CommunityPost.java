@@ -34,7 +34,7 @@ public class CommunityPost implements Serializable {
 
     @ApiModelProperty(value = "帖子ID，主键")
     @TableId(value = "post_id", type = IdType.AUTO)
-    private Integer postId;
+    private Long postId;
 
     @ApiModelProperty(value = "发布者ID，关联user表")
     private Integer userId;
