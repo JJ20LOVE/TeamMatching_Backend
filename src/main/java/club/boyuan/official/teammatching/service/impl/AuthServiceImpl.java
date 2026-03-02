@@ -7,7 +7,9 @@ import club.boyuan.official.teammatching.common.utils.RedisUtils;
 import club.boyuan.official.teammatching.common.utils.SecurityUtils;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
+import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 import club.boyuan.official.teammatching.entity.User;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.UserMapper;
@@ -15,6 +17,7 @@ import club.boyuan.official.teammatching.service.AuthService;
 import club.boyuan.official.teammatching.service.EmailService;
 import club.boyuan.official.teammatching.service.SmsService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -110,6 +113,48 @@ public class AuthServiceImpl implements AuthService {
         }
         
         log.info("验证码发送成功: {}, 类型: {}", target, type);
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WxLoginResponse wxLogin(WxLoginRequest wxLoginRequest) {
+        log.info("开始处理微信登录请求，code: {}", wxLoginRequest.getCode());
+        
+        // 1. 调用微信接口获取openid和session_key
+        WxSessionResult sessionResult = getSessionKey(wxLoginRequest.getCode());
+        
+        // 2. 解密用户信息（如果提供了encryptedData和iv）
+        WxUserInfo userInfo = null;
+        if (wxLoginRequest.getEncryptedData() != null && wxLoginRequest.getIv() != null) {
+            userInfo = decryptUserInfo(
+                wxLoginRequest.getEncryptedData(), 
+                wxLoginRequest.getIv(), 
+                sessionResult.getSessionKey()
+            );
+        }
+        
+        // 3. 查找或创建用户
+        User user = findOrCreateWxUser(sessionResult.getOpenid(), userInfo);
+        
+        // 4. 更新用户最后登录时间
+        updateUserLoginInfo(user.getUserId());
+        
+        // 5. 生成JWT令牌
+        String token = JwtUtils.generateToken(user.getUserId());
+        
+        // 6. 将令牌存储到Redis
+        storeTokenToRedis(user.getUserId(), token);
+        
+        // 7. 构造响应
+        WxLoginResponse response = new WxLoginResponse();
+        response.setUserId(user.getUserId());
+        response.setToken(token);
+        response.setExpiresIn(JwtUtils.getExpirationTimeInSeconds());
+        response.setAuthStatus(user.getAuthStatus());
+        response.setIsNewUser(user.getCreatedTime().equals(user.getUpdateTime()));
+        
+        log.info("微信登录成功，用户ID: {}, 是否新用户: {}", user.getUserId(), response.getIsNewUser());
+        return response;
     }
     
     /**
@@ -230,5 +275,129 @@ public class AuthServiceImpl implements AuthService {
     private void storeTokenToRedis(Integer userId, String token) {
         String key = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
         redisUtils.set(key, token, RedisConstants.JWT_TOKEN_EXPIRE_TIME * 60 * 60);
+    }
+    
+    /**
+     * 调用微信接口获取session_key和openid
+     */
+    private WxSessionResult getSessionKey(String code) {
+        // TODO: 这里需要配置微信小程序的appid和secret
+        // 暂时返回模拟数据用于开发测试
+        WxSessionResult result = new WxSessionResult();
+        result.setOpenid("mock_openid_" + code);
+        result.setSessionKey("mock_session_key_" + code);
+        return result;
+        
+        /*
+        // 实际生产环境应该这样实现：
+        String appId = "your_wechat_appid";
+        String secret = "your_wechat_secret";
+        String url = String.format(
+            "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+            appId, secret, code
+        );
+        
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            String response = restTemplate.getForObject(url, String.class);
+            // 解析JSON响应
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.readTree(response);
+            
+            if (jsonNode.has("errcode")) {
+                throw new BusinessException("WX_LOGIN_ERROR", "微信登录失败: " + jsonNode.get("errmsg").asText());
+            }
+            
+            WxSessionResult result = new WxSessionResult();
+            result.setOpenid(jsonNode.get("openid").asText());
+            result.setSessionKey(jsonNode.get("session_key").asText());
+            return result;
+            
+        } catch (Exception e) {
+            log.error("调用微信接口失败: {}", e.getMessage(), e);
+            throw new BusinessException("WX_API_ERROR", "调用微信接口失败");
+        }
+        */
+    }
+    
+    /**
+     * 解密微信用户信息
+     */
+    private WxUserInfo decryptUserInfo(String encryptedData, String iv, String sessionKey) {
+        // TODO: 实现微信数据解密逻辑
+        // 这需要使用AES解密算法
+        WxUserInfo userInfo = new WxUserInfo();
+        userInfo.setNickName("微信用户");
+        userInfo.setAvatarUrl("");
+        userInfo.setGender(0);
+        return userInfo;
+    }
+    
+    /**
+     * 查找或创建微信用户
+     */
+    private User findOrCreateWxUser(String openid, WxUserInfo userInfo) {
+        // 1. 根据openid查找用户
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("openid", openid);
+        User existingUser = userMapper.selectOne(queryWrapper);
+        
+        if (existingUser != null) {
+            // 用户已存在，直接返回
+            return existingUser;
+        }
+        
+        // 2. 用户不存在，创建新用户
+        User newUser = new User();
+        newUser.setOpenid(openid);
+        newUser.setNickname(userInfo != null ? userInfo.getNickName() : "微信用户");
+        newUser.setWechatNickname(userInfo != null ? userInfo.getNickName() : "微信用户");
+        newUser.setAvatar(userInfo != null ? userInfo.getAvatarUrl() : "");
+        newUser.setGender(userInfo != null ? userInfo.getGender() : 0);
+        newUser.setRole("student");
+        newUser.setAuthStatus(AuthStatusEnum.PENDING.getCode());
+        newUser.setStatus(false);
+        newUser.setCreatedTime(LocalDateTime.now());
+        newUser.setUpdateTime(LocalDateTime.now());
+        
+        int insertResult = userMapper.insert(newUser);
+        if (insertResult <= 0) {
+            throw new BusinessException("CREATE_USER_FAILED", "创建用户失败");
+        }
+        
+        return newUser;
+    }
+    
+    /**
+     * 更新用户登录信息
+     */
+    private void updateUserLoginInfo(Integer userId) {
+        User user = new User();
+        user.setUserId(userId);
+        user.setLastLoginTime(LocalDateTime.now());
+        user.setLoginCount(user.getLoginCount() != null ? user.getLoginCount() + 1 : 1);
+        user.setUpdateTime(LocalDateTime.now());
+        
+        userMapper.updateById(user);
+    }
+    
+    /**
+     * 微信session结果类
+     */
+    @Data
+    private static class WxSessionResult {
+        private String openid;
+        private String sessionKey;
+    }
+    
+    /**
+     * 微信用户信息类
+     */
+    @Data
+    private static class WxUserInfo {
+        private String nickName;
+        private String avatarUrl;
+        private Integer gender;
+        // 可以添加更多字段如city, province等
     }
 }
