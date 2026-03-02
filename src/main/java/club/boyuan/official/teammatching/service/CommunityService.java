@@ -1,8 +1,12 @@
 package club.boyuan.official.teammatching.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
+import club.boyuan.official.teammatching.entity.CommunityPost;
+import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
 /**
  * 社区服务接口
  */
-public interface CommunityService {
+public interface CommunityService extends IService<CommunityPost> {
     // 社区服务接口方法
+    void createNewPost(CreatePostRequest request, Integer userId);
 }
