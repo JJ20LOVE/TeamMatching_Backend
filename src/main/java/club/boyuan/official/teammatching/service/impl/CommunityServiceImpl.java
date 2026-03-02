@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, CommunityPost> implements CommunityService {
     // 社区服务实现
     @Override
-    public void createNewPost(CreatePostRequest request, Integer userId) {
+    public Long createNewPost(CreatePostRequest request, Integer userId) {
         // 1. 实例化实体类
         CommunityPost post = new CommunityPost();
 
@@ -29,7 +29,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
         // postId由后端自动生成
         post.setUserId(userId); // 添加UserId
         // section，title，content，images由前端传入
-        post.setStatus(1); // 1-正常
+        post.setStatus(0); // 0表示待审核
         post.setViewCount(0); // viewCount
         post.setLikeCount(0); // likeCount
         post.setCommentCount(0); // commentCount
@@ -40,5 +40,6 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
         // 4. 调用 MyBatis-Plus 提供的 save 方法
         // 这一步会触发 JacksonTypeHandler，自动把 List<String> 转为数据库里的 JSON 字符串
         this.save(post);
+        return post.getPostId();
     }
 }
