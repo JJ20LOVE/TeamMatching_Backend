@@ -2,7 +2,9 @@ package club.boyuan.official.teammatching.controller;
 
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
+import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 import club.boyuan.official.teammatching.service.AuthService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -76,6 +78,29 @@ public class AuthController {
         } catch (Exception e) {
             log.error("发送验证码失败: target={}, error={}", 
                     sendVerifyCodeRequest.getTarget(), e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+    /**
+     * 微信一键登录接口
+     * @param wxLoginRequest 微信登录请求参数
+     * @return 微信登录响应信息
+     */
+    @PostMapping("/wx-login")
+    @ApiOperation(value = "微信一键登录", notes = "通过微信临时登录凭证进行一键登录")
+    public ResponseEntity<WxLoginResponse> wxLogin(
+            @ApiParam(value = "微信登录请求参数", required = true)
+            @Valid @RequestBody WxLoginRequest wxLoginRequest) {
+        
+        log.info("收到微信登录请求: code={}", wxLoginRequest.getCode());
+        
+        try {
+            WxLoginResponse response = authService.wxLogin(wxLoginRequest);
+            log.info("微信登录成功: userId={}", response.getUserId());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("微信登录失败: code={}, error={}", wxLoginRequest.getCode(), e.getMessage(), e);
             throw e;
         }
     }

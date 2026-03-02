@@ -42,6 +42,13 @@ spring:
 app:
   environment: test  # test/prod
 
+# 微信小程序配置
+wechat:
+  miniapp:
+    appid: your_wechat_appid
+    secret: your_wechat_secret
+    enabled: false  # 设置为true启用微信登录
+
 # 短信配置
 sms:
   enabled: false  # 设置为true启用短信服务

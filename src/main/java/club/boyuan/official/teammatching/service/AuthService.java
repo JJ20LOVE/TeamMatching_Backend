@@ -2,7 +2,9 @@ package club.boyuan.official.teammatching.service;
 
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
+import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 
 /**
  * 认证服务接口
@@ -21,6 +23,13 @@ public interface AuthService {
      * @param sendVerifyCodeRequest 发送验证码请求参数
      */
     void sendVerifyCode(SendVerifyCodeRequest sendVerifyCodeRequest);
+    
+    /**
+     * 微信一键登录
+     * @param wxLoginRequest 微信登录请求参数
+     * @return 微信登录响应信息
+     */
+    WxLoginResponse wxLogin(WxLoginRequest wxLoginRequest);
     
     // 其他认证服务接口方法
 }
