@@ -8,5 +8,5 @@ import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest
  */
 public interface CommunityService extends IService<CommunityPost> {
     // 社区服务接口方法
-    Long createNewPost(CreatePostRequest request, Integer userId);
+    Number createNewPost(CreatePostRequest request, Integer userId);
 }

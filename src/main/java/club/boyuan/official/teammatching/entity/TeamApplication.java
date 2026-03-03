@@ -17,7 +17,7 @@ import lombok.experimental.Accessors;
  * </p>
  *
  * @author dhy
- * @since 2026-03-01
+ * @since 2026-03-03
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -47,14 +47,11 @@ public class TeamApplication implements Serializable {
     @ApiModelProperty(value = "申请原因/自我介绍")
     private String applyReason;
 
-    @ApiModelProperty(value = "投递专用简历URL")
-    private String customResumeUrl;
+    @ApiModelProperty(value = "投递专用简历文件ID，关联file_resource表")
+    private Long customResumeFileId;
 
-    @ApiModelProperty(value = "投递专用简历文件名")
-    private String customResumeName;
-
-    @ApiModelProperty(value = "其他附件链接（获奖证书等）")
-    private String applicationAttachmentUrl;
+    @ApiModelProperty(value = "其他附件文件ID，关联file_resource表")
+    private Long applicationAttachmentFileId;
 
     @ApiModelProperty(value = "结果：0-待审核 1-通过 2-驳回")
     private Integer result;
