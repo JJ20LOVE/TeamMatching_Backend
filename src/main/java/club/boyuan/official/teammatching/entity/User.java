@@ -18,7 +18,7 @@ import lombok.experimental.Accessors;
  * </p>
  *
  * @author dhy
- * @since 2026-03-01
+ * @since 2026-03-03
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -60,8 +60,8 @@ public class User implements Serializable {
     @ApiModelProperty(value = "密码，加密存储（BCrypt）")
     private String password;
 
-    @ApiModelProperty(value = "头像URL（OSS/CDN链接）")
-    private String avatar;
+    @ApiModelProperty(value = "头像文件ID，关联file_resource表")
+    private Long avatarFileId;
 
     @ApiModelProperty(value = "性别：0-未知 1-男 2-女")
     private Integer gender;
@@ -83,15 +83,6 @@ public class User implements Serializable {
 
     @ApiModelProperty(value = "获奖经历")
     private String awardExperience;
-
-    @ApiModelProperty(value = "通用简历附件URL")
-    private String resumeUrl;
-
-    @ApiModelProperty(value = "通用简历文件名")
-    private String resumeName;
-
-    @ApiModelProperty(value = "简历上传时间")
-    private LocalDateTime resumeUploadTime;
 
     @ApiModelProperty(value = "角色：admin/student")
     private String role;

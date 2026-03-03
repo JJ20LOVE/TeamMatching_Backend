@@ -3,8 +3,6 @@ package club.boyuan.official.teammatching.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
-
-import java.io.Serial;
 import java.time.LocalDateTime;
 import java.io.Serializable;
 import io.swagger.annotations.ApiModel;
@@ -19,7 +17,7 @@ import lombok.experimental.Accessors;
  * </p>
  *
  * @author dhy
- * @since 2026-03-01
+ * @since 2026-03-03
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -28,7 +26,6 @@ import lombok.experimental.Accessors;
 @ApiModel(value="Project对象", description="项目表")
 public class Project implements Serializable {
 
-    @Serial
     private static final long serialVersionUID = 1L;
 
     @ApiModelProperty(value = "项目ID，主键")

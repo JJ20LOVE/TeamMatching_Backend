@@ -444,7 +444,7 @@ public class AuthServiceImpl implements AuthService {
         newUser.setOpenid(openid);
         newUser.setNickname(userInfo != null ? userInfo.getNickName() : "微信用户");
         newUser.setWechatNickname(userInfo != null ? userInfo.getNickName() : "微信用户");
-        newUser.setAvatar(userInfo != null ? userInfo.getAvatarUrl() : "");
+        //newUser.setAvatar(userInfo != null ? userInfo.getAvatarUrl() : "");
         newUser.setGender(userInfo != null ? userInfo.getGender() : 0);
         newUser.setRole("student");
         newUser.setAuthStatus(AuthStatusEnum.PENDING.getCode());

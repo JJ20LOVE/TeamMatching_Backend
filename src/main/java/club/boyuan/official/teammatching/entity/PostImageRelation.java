@@ -13,7 +13,7 @@ import lombok.experimental.Accessors;
 
 /**
  * <p>
- * 技能标签表
+ * 帖子图片关联表
  * </p>
  *
  * @author dhy
@@ -22,30 +22,26 @@ import lombok.experimental.Accessors;
 @Data
 @EqualsAndHashCode(callSuper = false)
 @Accessors(chain = true)
-@TableName("skill_tag")
-@ApiModel(value="SkillTag对象", description="技能标签表")
-public class SkillTag implements Serializable {
+@TableName("post_image_relation")
+@ApiModel(value="PostImageRelation对象", description="帖子图片关联表")
+public class PostImageRelation implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    @ApiModelProperty(value = "标签ID，主键")
-    @TableId(value = "tag_id", type = IdType.AUTO)
-    private Integer tagId;
+    @ApiModelProperty(value = "关联ID")
+    @TableId(value = "relation_id", type = IdType.AUTO)
+    private Integer relationId;
 
-    @ApiModelProperty(value = "标签名（如Python、Java）")
-    private String tagName;
+    @ApiModelProperty(value = "帖子ID")
+    private Integer postId;
 
-    @ApiModelProperty(value = "分类（编程语言、框架、工具等）")
-    private String category;
+    @ApiModelProperty(value = "文件ID")
+    private Long fileId;
 
-    @ApiModelProperty(value = "排序权重")
+    @ApiModelProperty(value = "排序顺序")
     private Integer sortOrder;
 
-    @ApiModelProperty(value = "创建时间")
     private LocalDateTime createdTime;
-
-    @ApiModelProperty(value = "更新时间")
-    private LocalDateTime updateTime;
 
 
 }
