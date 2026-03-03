@@ -20,6 +20,6 @@ public class RegisterResponse {
     @ApiModelProperty(value = "令牌过期时间(秒)")
     private Long expiresIn;
     
-    @ApiModelProperty(value = "认证状态：0-待审核 1-已通过 2-已驳回")
+    @ApiModelProperty(value = "认证状态：0-待审核 1-已通过 2-未认证")
     private Integer authStatus;
 }
