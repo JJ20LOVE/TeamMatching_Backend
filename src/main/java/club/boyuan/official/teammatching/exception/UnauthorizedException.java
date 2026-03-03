@@ -4,5 +4,12 @@ package club.boyuan.official.teammatching.exception;
  * 未授权异常
  */
 public class UnauthorizedException extends RuntimeException {
-    // 未授权异常类
+    
+    public UnauthorizedException(String message) {
+        super(message);
+    }
+    
+    public UnauthorizedException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

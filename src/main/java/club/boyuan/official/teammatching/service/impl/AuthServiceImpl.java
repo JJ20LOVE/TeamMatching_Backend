@@ -5,9 +5,14 @@ import club.boyuan.official.teammatching.common.enums.AuthStatusEnum;
 import club.boyuan.official.teammatching.common.utils.JwtUtils;
 import club.boyuan.official.teammatching.common.utils.RedisUtils;
 import club.boyuan.official.teammatching.common.utils.SecurityUtils;
+import club.boyuan.official.teammatching.dto.request.auth.ChangePasswordRequest;
+import club.boyuan.official.teammatching.dto.request.auth.ForgotPasswordRequest;
+import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
+import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 import club.boyuan.official.teammatching.entity.User;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.UserMapper;
@@ -15,6 +20,7 @@ import club.boyuan.official.teammatching.service.AuthService;
 import club.boyuan.official.teammatching.service.EmailService;
 import club.boyuan.official.teammatching.service.SmsService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 /**
  * 认证服务实现
@@ -110,6 +117,82 @@ public class AuthServiceImpl implements AuthService {
         }
         
         log.info("验证码发送成功: {}, 类型: {}", target, type);
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WxLoginResponse wxLogin(WxLoginRequest wxLoginRequest) {
+        log.info("开始处理微信登录请求，code: {}", wxLoginRequest.getCode());
+        
+        // 1. 调用微信接口获取openid和session_key
+        WxSessionResult sessionResult = getSessionKey(wxLoginRequest.getCode());
+        
+        // 2. 解密用户信息（如果提供了encryptedData和iv）
+        WxUserInfo userInfo = null;
+        if (wxLoginRequest.getEncryptedData() != null && wxLoginRequest.getIv() != null) {
+            userInfo = decryptUserInfo(
+                wxLoginRequest.getEncryptedData(), 
+                wxLoginRequest.getIv(), 
+                sessionResult.getSessionKey()
+            );
+        }
+        
+        // 3. 查找或创建用户
+        User user = findOrCreateWxUser(sessionResult.getOpenid(), userInfo);
+        
+        // 4. 更新用户最后登录时间
+        updateUserLoginInfo(user.getUserId());
+        
+        // 5. 生成JWT令牌
+        String token = JwtUtils.generateToken(user.getUserId());
+        
+        // 6. 将令牌存储到Redis
+        storeTokenToRedis(user.getUserId(), token);
+        
+        // 7. 构造响应
+        WxLoginResponse response = new WxLoginResponse();
+        response.setUserId(user.getUserId());
+        response.setToken(token);
+        response.setExpiresIn(JwtUtils.getExpirationTimeInSeconds());
+        response.setAuthStatus(user.getAuthStatus());
+        response.setIsNewUser(user.getCreatedTime().equals(user.getUpdateTime()));
+        
+        log.info("微信登录成功，用户ID: {}, 是否新用户: {}", user.getUserId(), response.getIsNewUser());
+        return response;
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public RegisterResponse login(LoginRequest loginRequest) {
+        log.info("开始处理用户登录请求，账号: {}", loginRequest.getAccount());
+        
+        // 1. 根据账号查找用户
+        User user = findUserByAccount(loginRequest.getAccount());
+        
+        // 2. 校验密码
+        validatePassword(loginRequest.getPassword(), user.getPassword());
+        
+        // 3. 检查用户状态
+        validateUserStatus(user);
+        
+        // 4. 更新用户登录信息
+        updateUserLoginInfo(user.getUserId());
+        
+        // 5. 生成JWT令牌
+        String token = JwtUtils.generateToken(user.getUserId());
+        
+        // 6. 将令牌存储到Redis
+        storeTokenToRedis(user.getUserId(), token);
+        
+        // 7. 构造响应
+        RegisterResponse response = new RegisterResponse();
+        response.setUserId(user.getUserId());
+        response.setToken(token);
+        response.setExpiresIn(JwtUtils.getExpirationTimeInSeconds());
+        response.setAuthStatus(user.getAuthStatus());
+        
+        log.info("用户登录成功，用户ID: {}", user.getUserId());
+        return response;
     }
     
     /**
@@ -230,5 +313,281 @@ public class AuthServiceImpl implements AuthService {
     private void storeTokenToRedis(Integer userId, String token) {
         String key = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
         redisUtils.set(key, token, RedisConstants.JWT_TOKEN_EXPIRE_TIME * 60 * 60);
+    }
+    
+    /**
+     * 根据账号查找用户
+     */
+    private User findUserByAccount(String account) {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        
+        if (SecurityUtils.isEmail(account)) {
+            queryWrapper.eq("email", account);
+        } else if (SecurityUtils.isPhone(account)) {
+            queryWrapper.eq("phone", account);
+        } else {
+            // 学号查询
+            queryWrapper.eq("student_id", account);
+        }
+        
+        User user = userMapper.selectOne(queryWrapper);
+        if (user == null) {
+            throw new BusinessException("账号不存在");
+        }
+        
+        return user;
+    }
+    
+    /**
+     * 校验密码
+     */
+    private void validatePassword(String rawPassword, String encodedPassword) {
+        if (!SecurityUtils.verifyPassword(rawPassword, encodedPassword)) {
+            throw new BusinessException("密码错误");
+        }
+    }
+    
+    /**
+     * 检查用户状态
+     */
+    private void validateUserStatus(User user) {
+        if (user.getStatus() == null || user.getStatus()) {
+            throw new BusinessException("账号已被冻结");
+        }
+    }
+    
+    /**
+     * 更新用户登录信息
+     */
+    private void updateUserLoginInfo(Integer userId) {
+        User user = new User();
+        user.setUserId(userId);
+        user.setLastLoginTime(LocalDateTime.now());
+        user.setLoginCount(user.getLoginCount() != null ? user.getLoginCount() + 1 : 1);
+        user.setUpdateTime(LocalDateTime.now());
+        
+        userMapper.updateById(user);
+    }
+    
+    /**
+     * 调用微信接口获取session_key和openid
+     */
+    private WxSessionResult getSessionKey(String code) {
+        // TODO: 这里需要配置微信小程序的appid和secret
+        // 暂时返回模拟数据用于开发测试
+        WxSessionResult result = new WxSessionResult();
+        result.setOpenid("mock_openid_" + code);
+        result.setSessionKey("mock_session_key_" + code);
+        return result;
+        
+        /*
+        // 实际生产环境应该这样实现：
+        String appId = "your_wechat_appid";
+        String secret = "your_wechat_secret";
+        String url = String.format(
+            "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+            appId, secret, code
+        );
+        
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            String response = restTemplate.getForObject(url, String.class);
+            // 解析JSON响应
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.readTree(response);
+            
+            if (jsonNode.has("errcode")) {
+                throw new BusinessException("WX_LOGIN_ERROR", "微信登录失败: " + jsonNode.get("errmsg").asText());
+            }
+            
+            WxSessionResult result = new WxSessionResult();
+            result.setOpenid(jsonNode.get("openid").asText());
+            result.setSessionKey(jsonNode.get("session_key").asText());
+            return result;
+            
+        } catch (Exception e) {
+            log.error("调用微信接口失败: {}", e.getMessage(), e);
+            throw new BusinessException("WX_API_ERROR", "调用微信接口失败");
+        }
+        */
+    }
+    
+    /**
+     * 解密微信用户信息
+     */
+    private WxUserInfo decryptUserInfo(String encryptedData, String iv, String sessionKey) {
+        // TODO: 实现微信数据解密逻辑
+        // 这需要使用AES解密算法
+        WxUserInfo userInfo = new WxUserInfo();
+        userInfo.setNickName("微信用户");
+        userInfo.setAvatarUrl("");
+        userInfo.setGender(0);
+        return userInfo;
+    }
+    
+    /**
+     * 查找或创建微信用户
+     */
+    private User findOrCreateWxUser(String openid, WxUserInfo userInfo) {
+        // 1. 根据openid查找用户
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("openid", openid);
+        User existingUser = userMapper.selectOne(queryWrapper);
+        
+        if (existingUser != null) {
+            // 用户已存在，直接返回
+            return existingUser;
+        }
+        
+        // 2. 用户不存在，创建新用户
+        User newUser = new User();
+        newUser.setOpenid(openid);
+        newUser.setNickname(userInfo != null ? userInfo.getNickName() : "微信用户");
+        newUser.setWechatNickname(userInfo != null ? userInfo.getNickName() : "微信用户");
+        newUser.setAvatar(userInfo != null ? userInfo.getAvatarUrl() : "");
+        newUser.setGender(userInfo != null ? userInfo.getGender() : 0);
+        newUser.setRole("student");
+        newUser.setAuthStatus(AuthStatusEnum.PENDING.getCode());
+        newUser.setStatus(false);
+        newUser.setCreatedTime(LocalDateTime.now());
+        newUser.setUpdateTime(LocalDateTime.now());
+        
+        int insertResult = userMapper.insert(newUser);
+        if (insertResult <= 0) {
+            throw new BusinessException("CREATE_USER_FAILED", "创建用户失败");
+        }
+        
+        return newUser;
+    }
+    
+    @Override
+    public RegisterResponse refreshToken(String oldToken) {
+        log.info("开始处理Token刷新请求");
+        
+        // 1. 验证旧Token
+        if (!JwtUtils.validateToken(oldToken)) {
+            throw new BusinessException("无效的访问令牌");
+        }
+        
+        // 2. 获取用户ID
+        Integer userId = JwtUtils.getUserIdFromToken(oldToken);
+        
+        // 3. 检查旧Token是否在Redis中存在
+        String oldTokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
+        String storedOldToken = (String) redisUtils.get(oldTokenKey);
+        if (!Objects.equals(storedOldToken, oldToken)) {
+            throw new BusinessException("令牌已失效，无法刷新");
+        }
+        
+        // 4. 查询用户信息
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        // 5. 检查用户状态
+        if (user.getStatus() == null || user.getStatus()) {
+            throw new BusinessException("账号已被冻结");
+        }
+        
+        // 6. 生成新的Token
+        String newToken = JwtUtils.generateToken(userId);
+        
+        // 7. 更新Redis中的Token
+        storeTokenToRedis(userId, newToken);
+        
+        // 8. 构造响应
+        RegisterResponse response = new RegisterResponse();
+        response.setUserId(userId);
+        response.setToken(newToken);
+        response.setExpiresIn(JwtUtils.getExpirationTimeInSeconds());
+        response.setAuthStatus(user.getAuthStatus());
+        
+        log.info("Token刷新成功，用户ID: {}", userId);
+        return response;
+    }
+    
+
+        
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void forgotPassword(ForgotPasswordRequest forgotPasswordRequest) {
+        log.info("开始处理找回密码请求，账号：{}", forgotPasswordRequest.getAccount());
+            
+        // 1. 校验验证码
+        validateVerifyCode(forgotPasswordRequest.getAccount(), forgotPasswordRequest.getVerifyCode());
+            
+        // 2. 根据账号查找用户
+        User user = findUserByAccount(forgotPasswordRequest.getAccount());
+            
+        // 3. 更新密码
+        String encodedPassword = SecurityUtils.encryptPassword(forgotPasswordRequest.getNewPassword());
+        user.setPassword(encodedPassword);
+        user.setUpdateTime(LocalDateTime.now());
+            
+        int updateResult = userMapper.updateById(user);
+        if (updateResult <= 0) {
+            throw new BusinessException("密码重置失败");
+        }
+            
+        // 4. 清除验证码
+        clearVerifyCode(forgotPasswordRequest.getAccount());
+            
+        // 5. 使所有已登录的 token 失效（可选）
+        String tokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, user.getUserId());
+        redisUtils.del(tokenKey);
+            
+        log.info("密码重置成功，用户 ID: {}", user.getUserId());
+    }
+        
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void changePassword(ChangePasswordRequest changePasswordRequest, Integer userId) {
+        log.info("开始处理修改密码请求，用户 ID: {}", userId);
+            
+        // 1. 根据 ID 查找用户
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+            
+        // 2. 验证旧密码
+        validatePassword(changePasswordRequest.getOldPassword(), user.getPassword());
+            
+        // 3. 更新密码
+        String encodedPassword = SecurityUtils.encryptPassword(changePasswordRequest.getNewPassword());
+        user.setPassword(encodedPassword);
+        user.setUpdateTime(LocalDateTime.now());
+            
+        int updateResult = userMapper.updateById(user);
+        if (updateResult <= 0) {
+            throw new BusinessException("密码修改失败");
+        }
+            
+        // 4. 使所有已登录的 token 失效（强制重新登录）
+        String tokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
+        redisUtils.del(tokenKey);
+            
+        log.info("密码修改成功，用户 ID: {}", userId);
+    }
+    
+    /**
+     * 微信session结果类
+     */
+    @Data
+    private static class WxSessionResult {
+        private String openid;
+        private String sessionKey;
+    }
+    
+    /**
+     * 微信用户信息类
+     */
+    @Data
+    private static class WxUserInfo {
+        private String nickName;
+        private String avatarUrl;
+        private Integer gender;
+        // 可以添加更多字段如city, province等
     }
 }
