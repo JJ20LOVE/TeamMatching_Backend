@@ -3,12 +3,8 @@ package club.boyuan.official.teammatching.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
-import com.baomidou.mybatisplus.annotation.TableField;
 import java.time.LocalDateTime;
 import java.io.Serializable;
-import java.util.List;
-
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
@@ -21,12 +17,12 @@ import lombok.experimental.Accessors;
  * </p>
  *
  * @author dhy
- * @since 2026-03-01
+ * @since 2026-03-03
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
 @Accessors(chain = true)
-@TableName(value = "community_post", autoResultMap = true)
+@TableName("community_post")
 @ApiModel(value="CommunityPost对象", description="社区帖子表")
 public class CommunityPost implements Serializable {
 
@@ -34,7 +30,7 @@ public class CommunityPost implements Serializable {
 
     @ApiModelProperty(value = "帖子ID，主键")
     @TableId(value = "post_id", type = IdType.AUTO)
-    private Long postId;
+    private Integer postId;
 
     @ApiModelProperty(value = "发布者ID，关联user表")
     private Integer userId;
@@ -47,10 +43,6 @@ public class CommunityPost implements Serializable {
 
     @ApiModelProperty(value = "帖子内容")
     private String content;
-
-    @ApiModelProperty(value = "图片URL列表（JSON数组）")
-    @TableField(typeHandler = JacksonTypeHandler.class)
-    private List<String> images;
 
     @ApiModelProperty(value = "浏览次数")
     private Integer viewCount;
