@@ -17,7 +17,7 @@ import lombok.experimental.Accessors;
  * </p>
  *
  * @author dhy
- * @since 2026-03-01
+ * @since 2026-03-03
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -68,14 +68,11 @@ public class TalentCard implements Serializable {
     @ApiModelProperty(value = "技能标签（逗号分隔，如：Python,Java,机器学习）")
     private String skillTags;
 
-    @ApiModelProperty(value = "简历附件URL")
-    private String resumeUrl;
+    @ApiModelProperty(value = "简历附件文件ID，关联file_resource表")
+    private Long resumeFileId;
 
-    @ApiModelProperty(value = "简历文件名")
-    private String resumeName;
-
-    @ApiModelProperty(value = "作品集链接")
-    private String portfolioUrl;
+    @ApiModelProperty(value = "作品集文件ID，关联file_resource表")
+    private Long portfolioFileId;
 
     @ApiModelProperty(value = "GitHub地址")
     private String githubUrl;

@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, CommunityPost> implements CommunityService {
     // 社区服务实现
     @Override
-    public Long createNewPost(CreatePostRequest request, Integer userId) {
+    public Number createNewPost(CreatePostRequest request, Integer userId) {
         // 1. 实例化实体类
         CommunityPost post = new CommunityPost();
 
