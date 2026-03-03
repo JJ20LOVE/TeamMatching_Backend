@@ -1,5 +1,7 @@
 package club.boyuan.official.teammatching.service;
 
+import club.boyuan.official.teammatching.dto.request.auth.ChangePasswordRequest;
+import club.boyuan.official.teammatching.dto.request.auth.ForgotPasswordRequest;
 import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
@@ -46,11 +48,19 @@ public interface AuthService {
      */
     RegisterResponse refreshToken(String oldToken);
     
+
     /**
-     * 用户登出
-     * @param userId 用户ID
+     * 找回密码
+     * @param forgotPasswordRequest 找回密码请求参数
      */
-    void logout(Integer userId);
+    void forgotPassword(ForgotPasswordRequest forgotPasswordRequest);
+    
+    /**
+     * 修改密码
+     * @param changePasswordRequest 修改密码请求参数
+     * @param userId 用户 ID
+     */
+    void changePassword(ChangePasswordRequest changePasswordRequest, Integer userId);
     
     // 其他认证服务接口方法
 }

@@ -5,6 +5,8 @@ import club.boyuan.official.teammatching.common.enums.AuthStatusEnum;
 import club.boyuan.official.teammatching.common.utils.JwtUtils;
 import club.boyuan.official.teammatching.common.utils.RedisUtils;
 import club.boyuan.official.teammatching.common.utils.SecurityUtils;
+import club.boyuan.official.teammatching.dto.request.auth.ChangePasswordRequest;
+import club.boyuan.official.teammatching.dto.request.auth.ForgotPasswordRequest;
 import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
@@ -505,21 +507,68 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
     
-    @Override
-    public void logout(Integer userId) {
-        log.info("开始处理用户登出请求，用户ID: {}", userId);
+
         
-        // 1. 从Redis中删除Token
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void forgotPassword(ForgotPasswordRequest forgotPasswordRequest) {
+        log.info("开始处理找回密码请求，账号：{}", forgotPasswordRequest.getAccount());
+            
+        // 1. 校验验证码
+        validateVerifyCode(forgotPasswordRequest.getAccount(), forgotPasswordRequest.getVerifyCode());
+            
+        // 2. 根据账号查找用户
+        User user = findUserByAccount(forgotPasswordRequest.getAccount());
+            
+        // 3. 更新密码
+        String encodedPassword = SecurityUtils.encryptPassword(forgotPasswordRequest.getNewPassword());
+        user.setPassword(encodedPassword);
+        user.setUpdateTime(LocalDateTime.now());
+            
+        int updateResult = userMapper.updateById(user);
+        if (updateResult <= 0) {
+            throw new BusinessException("密码重置失败");
+        }
+            
+        // 4. 清除验证码
+        clearVerifyCode(forgotPasswordRequest.getAccount());
+            
+        // 5. 使所有已登录的 token 失效（可选）
+        String tokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, user.getUserId());
+        redisUtils.del(tokenKey);
+            
+        log.info("密码重置成功，用户 ID: {}", user.getUserId());
+    }
+        
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void changePassword(ChangePasswordRequest changePasswordRequest, Integer userId) {
+        log.info("开始处理修改密码请求，用户 ID: {}", userId);
+            
+        // 1. 根据 ID 查找用户
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+            
+        // 2. 验证旧密码
+        validatePassword(changePasswordRequest.getOldPassword(), user.getPassword());
+            
+        // 3. 更新密码
+        String encodedPassword = SecurityUtils.encryptPassword(changePasswordRequest.getNewPassword());
+        user.setPassword(encodedPassword);
+        user.setUpdateTime(LocalDateTime.now());
+            
+        int updateResult = userMapper.updateById(user);
+        if (updateResult <= 0) {
+            throw new BusinessException("密码修改失败");
+        }
+            
+        // 4. 使所有已登录的 token 失效（强制重新登录）
         String tokenKey = String.format(RedisConstants.USER_JWT_TOKEN_KEY, userId);
         redisUtils.del(tokenKey);
-        
-        // 2. 清除用户登录相关信息（可选）
-        User user = new User();
-        user.setUserId(userId);
-        user.setUpdateTime(LocalDateTime.now());
-        userMapper.updateById(user);
-        
-        log.info("用户登出成功，用户ID: {}", userId);
+            
+        log.info("密码修改成功，用户 ID: {}", userId);
     }
     
     /**

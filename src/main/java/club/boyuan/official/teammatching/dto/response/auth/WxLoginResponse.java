@@ -20,9 +20,9 @@ public class WxLoginResponse {
     @ApiModelProperty(value = "令牌过期时间(秒)")
     private Long expiresIn;
     
-    @ApiModelProperty(value = "认证状态：0-待审核 1-已通过 2-已驳回")
+    @ApiModelProperty(value = "认证状态：0-待审核 1-已通过 2-未认证")
     private Integer authStatus;
     
-    @ApiModelProperty(value = "是否为新用户")
+    @ApiModelProperty(value = "是否为新用户（true 表示需引导绑定手机号/邮箱）")
     private Boolean isNewUser;
 }
