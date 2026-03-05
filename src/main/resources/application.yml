@@ -99,7 +99,7 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     enabled: true
-    path: /swagger-ui.html号一
+    path: /swagger-ui.html
     operations-sorter: alpha
     tags-sorter: alpha
     try-it-out-enabled: true
