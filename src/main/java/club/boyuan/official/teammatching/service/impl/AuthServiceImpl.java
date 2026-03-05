@@ -10,12 +10,19 @@ import club.boyuan.official.teammatching.dto.request.auth.ForgotPasswordRequest;
 import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.SubmitAuthRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
+import club.boyuan.official.teammatching.dto.response.auth.AuthStatusResponse;
+import club.boyuan.official.teammatching.dto.response.auth.SubmitAuthResponse;
 import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 import club.boyuan.official.teammatching.entity.User;
+import club.boyuan.official.teammatching.entity.AuthMaterial;
+import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.UserMapper;
+import club.boyuan.official.teammatching.mapper.AuthMaterialMapper;
+import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.service.AuthService;
 import club.boyuan.official.teammatching.service.EmailService;
 import club.boyuan.official.teammatching.service.SmsService;
@@ -28,6 +35,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -39,6 +48,12 @@ public class AuthServiceImpl implements AuthService {
     
     @Autowired
     private UserMapper userMapper;
+    
+    @Autowired
+    private AuthMaterialMapper authMaterialMapper;
+    
+    @Autowired
+    private FileResourceMapper fileResourceMapper;
     
     @Autowired
     private RedisUtils redisUtils;
@@ -569,6 +584,175 @@ public class AuthServiceImpl implements AuthService {
         redisUtils.del(tokenKey);
             
         log.info("密码修改成功，用户 ID: {}", userId);
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SubmitAuthResponse submitAuth(SubmitAuthRequest submitAuthRequest, Integer userId) {
+        log.info("开始处理身份认证提交请求，用户 ID: {}", userId);
+        
+        // 1. 校验文件是否存在且属于当前用户
+        List<Long> fileIds = submitAuthRequest.getMaterialFileIds();
+        List<Integer> materialTypes = submitAuthRequest.getMaterialTypes();
+        
+        if (fileIds.size() != materialTypes.size()) {
+            throw new BusinessException("文件 ID 列表与材料类型列表长度不一致");
+        }
+        
+        // 2. 查询用户信息
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        // 3. 检查是否已经有待审核或已通过的认证申请
+        QueryWrapper<AuthMaterial> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId);
+        queryWrapper.in("audit_status", 0, 1); // 待审核或通过
+        AuthMaterial existingAuth = authMaterialMapper.selectOne(queryWrapper);
+        if (existingAuth != null) {
+            throw new BusinessException("您已有待审核或已通过的认证申请，请勿重复提交");
+        }
+        
+        // 4. 保存认证材料记录
+        for (int i = 0; i < fileIds.size(); i++) {
+            Long fileId = fileIds.get(i);
+            Integer materialType = materialTypes.get(i);
+            
+            // 验证文件是否存在
+            FileResource fileResource = fileResourceMapper.selectById(fileId);
+            if (fileResource == null) {
+                throw new BusinessException("文件不存在：" + fileId);
+            }
+            
+            // 验证文件是否属于当前用户
+            if (!userId.equals(fileResource.getUserId())) {
+                throw new BusinessException("文件不属于当前用户：" + fileId);
+            }
+            
+            // 创建认证材料记录
+            AuthMaterial authMaterial = new AuthMaterial();
+            authMaterial.setUserId(userId);
+            authMaterial.setMaterialType(materialType);
+            authMaterial.setFileId(fileId);
+            authMaterial.setDescription(getMaterialTypeName(materialType));
+            authMaterial.setAuditStatus(0); // 待审核
+            authMaterial.setCreatedTime(LocalDateTime.now());
+            
+            int insertResult = authMaterialMapper.insert(authMaterial);
+            if (insertResult <= 0) {
+                throw new BusinessException("认证材料保存失败");
+            }
+            
+            // 更新文件的关联状态
+            fileResource.setTargetType(8); // 8-认证证明材料
+            fileResource.setTargetId(authMaterial.getMaterialId());
+            fileResourceMapper.updateById(fileResource);
+        }
+        
+        // 5. 更新用户基本信息（学号、姓名、专业、年级、邮箱）
+        user.setStudentId(submitAuthRequest.getStudentId());
+        user.setUsername(submitAuthRequest.getRealName());
+        user.setMajor(submitAuthRequest.getMajor());
+        user.setGrade(submitAuthRequest.getGrade());
+        user.setEmail(submitAuthRequest.getEmail());
+        user.setAuthStatus(AuthStatusEnum.PENDING.getCode());
+        user.setUpdateTime(LocalDateTime.now());
+        
+        int updateUserResult = userMapper.updateById(user);
+        if (updateUserResult <= 0) {
+            throw new BusinessException("用户信息更新失败");
+        }
+        
+        // 6. 构造响应
+        SubmitAuthResponse response = new SubmitAuthResponse();
+        response.setAuthId(user.getUserId());
+        response.setMessage("认证申请提交成功，等待审核");
+        response.setAuthStatus(AuthStatusEnum.PENDING.getCode());
+        
+        log.info("身份认证提交成功，用户 ID: {}", userId);
+        return response;
+    }
+    
+    @Override
+    public AuthStatusResponse getAuthStatus(Integer userId) {
+        log.info("开始查询用户认证状态，用户 ID: {}", userId);
+        
+        // 1. 查询用户信息
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        // 2. 构造响应
+        AuthStatusResponse response = new AuthStatusResponse();
+        response.setAuthStatus(user.getAuthStatus());
+        response.setAuditTime(user.getAuditTime());
+        response.setRemark(user.getRemark());
+        
+        // 3. 查询认证材料
+        QueryWrapper<AuthMaterial> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId);
+        queryWrapper.orderByDesc("created_time");
+        List<AuthMaterial> materials = authMaterialMapper.selectList(queryWrapper);
+        
+        // 4. 转换材料信息
+        List<AuthStatusResponse.AuthMaterialInfo> materialInfos = new ArrayList<>();
+        if (materials != null && !materials.isEmpty()) {
+            for (AuthMaterial material : materials) {
+                AuthStatusResponse.AuthMaterialInfo materialInfo = 
+                    new AuthStatusResponse.AuthMaterialInfo();
+                materialInfo.setMaterialId(material.getMaterialId());
+                materialInfo.setMaterialType(material.getMaterialType());
+                materialInfo.setAuditStatus(material.getAuditStatus());
+                materialInfo.setRemark(material.getRemark());
+                materialInfo.setCreatedTime(material.getCreatedTime());
+                
+                // 查询文件信息
+                if (material.getFileId() != null) {
+                    FileResource fileResource = fileResourceMapper.selectById(material.getFileId());
+                    if (fileResource != null) {
+                        AuthStatusResponse.FileInfo fileInfo = 
+                            new AuthStatusResponse.FileInfo();
+                        fileInfo.setFileId(fileResource.getFileId());
+                        fileInfo.setFileName(fileResource.getFileName());
+                        fileInfo.setFileUrl(fileResource.getFileUrl());
+                        fileInfo.setFileSize(fileResource.getFileSize());
+                        materialInfo.setFileInfo(fileInfo);
+                    }
+                }
+                
+                materialInfos.add(materialInfo);
+            }
+        }
+        response.setMaterials(materialInfos);
+        
+        // 5. 设置申请时间（取最早的材料创建时间）
+        if (!materialInfos.isEmpty()) {
+            LocalDateTime applyTime = materialInfos.get(materialInfos.size() - 1).getCreatedTime();
+            response.setApplyTime(applyTime);
+        }
+        
+        log.info("认证状态查询成功，用户 ID: {}, 状态：{}", userId, user.getAuthStatus());
+        return response;
+    }
+    
+    /**
+     * 获取材料类型名称
+     */
+    private String getMaterialTypeName(Integer materialType) {
+        switch (materialType) {
+            case 1:
+                return "学生证";
+            case 2:
+                return "身份证";
+            case 3:
+                return "校园卡";
+            case 4:
+                return "学信网证明";
+            default:
+                return "其他";
+        }
     }
     
     /**
