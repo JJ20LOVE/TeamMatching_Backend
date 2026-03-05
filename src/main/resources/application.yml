@@ -42,6 +42,18 @@ spring:
 app:
   environment: test  # test/prod
 
+
+# 阿里云 OSS 配置
+aliyun:
+  oss:
+    enabled: true  # 是否启用 OSS
+    endpoint: oss-cn-shanghai.aliyuncs.com # OSS Endpoint
+    access-key-id: ${OSS_ACCESS_KEY_ID:your-access-key-id}  # 从环境变量读取或使用默认值
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:your-access-key-secret}
+    bucket-name: dhydebucket  # Bucket 名称
+    custom-domain:  # 自定义域名（可选，如 CDN 域名）
+    file-prefix: team-matching/  # 文件前缀路径
+
 # 微信小程序配置
 wechat:
   miniapp:
