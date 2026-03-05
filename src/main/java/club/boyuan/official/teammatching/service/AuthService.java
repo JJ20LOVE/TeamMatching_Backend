@@ -5,8 +5,11 @@ import club.boyuan.official.teammatching.dto.request.auth.ForgotPasswordRequest;
 import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.SubmitAuthRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
+import club.boyuan.official.teammatching.dto.response.auth.AuthStatusResponse;
+import club.boyuan.official.teammatching.dto.response.auth.SubmitAuthResponse;
 import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 
 /**
@@ -61,6 +64,21 @@ public interface AuthService {
      * @param userId 用户 ID
      */
     void changePassword(ChangePasswordRequest changePasswordRequest, Integer userId);
+    
+    /**
+     * 提交身份认证
+     * @param submitAuthRequest 提交认证请求参数
+     * @param userId 用户 ID
+     * @return 提交响应信息
+     */
+    SubmitAuthResponse submitAuth(SubmitAuthRequest submitAuthRequest, Integer userId);
+    
+    /**
+     * 查询认证状态
+     * @param userId 用户 ID
+     * @return 认证状态信息
+     */
+    AuthStatusResponse getAuthStatus(Integer userId);
     
     // 其他认证服务接口方法
 }

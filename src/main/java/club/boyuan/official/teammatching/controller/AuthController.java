@@ -9,10 +9,13 @@ import club.boyuan.official.teammatching.dto.request.auth.ForgotPasswordRequest;
 import club.boyuan.official.teammatching.dto.request.auth.LoginRequest;
 import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
+import club.boyuan.official.teammatching.dto.request.auth.SubmitAuthRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
 import club.boyuan.official.teammatching.dto.response.auth.SendVerifyCodeResponse;
+import club.boyuan.official.teammatching.dto.response.auth.SubmitAuthResponse;
+import club.boyuan.official.teammatching.dto.response.auth.AuthStatusResponse;
 import club.boyuan.official.teammatching.dto.response.auth.WxLoginResponse;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.service.AuthService;
@@ -24,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -198,6 +202,65 @@ public class AuthController {
             return ResponseEntity.ok(CommonResponse.ok("密码修改成功", null));
         } catch (Exception e) {
             log.error("修改密码失败：userId={}, error={}", UserContextUtil.getCurrentUserId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+    /**
+     * 提交身份认证接口
+     * @param submitAuthRequest 提交认证请求参数
+     * @return 提交响应信息
+     */
+    @PostMapping("/verify")
+    @ApiOperation(value = "提交身份认证", notes = "提交校园身份认证信息（包含证明材料）")
+    @NeedLogin
+    public ResponseEntity<CommonResponse<SubmitAuthResponse>> submitAuth(
+            @ApiParam(value = "提交认证请求参数", required = true)
+            @Valid @RequestBody SubmitAuthRequest submitAuthRequest) {
+        
+        log.info("收到提交身份认证请求");
+        
+        try {
+            // 从上下文中获取当前登录用户 ID
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+            
+            SubmitAuthResponse response = authService.submitAuth(submitAuthRequest, userId);
+            log.info("身份认证提交成功：userId={}", userId);
+            
+            return ResponseEntity.ok(CommonResponse.ok(response));
+        } catch (Exception e) {
+            log.error("身份认证提交失败：error={}", e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+    /**
+     * 查询认证状态接口
+     * @return 认证状态信息
+     */
+    @GetMapping("/status")
+    @ApiOperation(value = "查询认证状态", notes = "查询当前用户的身份认证状态及材料信息")
+    @NeedLogin
+    public ResponseEntity<CommonResponse<AuthStatusResponse>> getAuthStatus() {
+        
+        log.info("收到查询认证状态请求");
+        
+        try {
+            // 从上下文中获取当前登录用户 ID
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+            
+            AuthStatusResponse response = authService.getAuthStatus(userId);
+            log.info("认证状态查询成功：userId={}, authStatus={}", userId, response.getAuthStatus());
+            
+            return ResponseEntity.ok(CommonResponse.ok(response));
+        } catch (Exception e) {
+            log.error("认证状态查询失败：error={}", e.getMessage(), e);
             throw e;
         }
     }
