@@ -33,7 +33,6 @@ public class WebConfig implements WebMvcConfigurer {
                         "/auth/forgot-password",
                         // 公共接口
                         "/public/**",
-                        "/common/**",
                         // 文档相关
                         "/swagger-ui/**",
                         "/v3/api-docs/**",
