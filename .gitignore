@@ -39,3 +39,6 @@ build/
 ### OSS Config ###
 **/application-local.yml
 **/application-local.properties
+
+### Test Data
+test_data.sql
