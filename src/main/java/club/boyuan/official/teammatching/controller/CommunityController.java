@@ -1,14 +1,14 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.dto.request.community.CommunityQueryRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
 import club.boyuan.official.teammatching.dto.response.community.PostDetailResponse;
+import club.boyuan.official.teammatching.dto.response.community.PostListResponse;
 import club.boyuan.official.teammatching.service.CommunityService;
 import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 社区相关控制器
@@ -32,5 +32,13 @@ public class CommunityController {
         PostDetailResponse.PostCreateVO vo = new PostDetailResponse.PostCreateVO(newPostId, "发布成功，待审核");
         // 调用 Service 执行发布逻辑
         return PostDetailResponse.success(vo);
+    }
+
+    @GetMapping("/posts")
+    public PostListResponse getPosts(@Valid CommunityQueryRequest request,
+                                      @RequestHeader(value = "Authorization", required = false) String token) {
+        Integer currentUserId = 34343333; // 可从 token 解析
+        List<PostListResponse.CommunityPostItem> posts = communityService.queryPostList(request, currentUserId);
+        return PostListResponse.success(posts);
     }
 }
