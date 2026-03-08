@@ -1,6 +1,7 @@
 package club.boyuan.official.teammatching.dto.response.community;
 
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
@@ -17,15 +18,14 @@ import java.util.List;
 @ApiModel(value = "帖子列表响应")
 public class PostListResponse extends CommonResponse<List<PostListResponse.CommunityPostItem>> {
 
-    public static PostListResponse success(List<CommunityPostItem> data) {
+    public static PostListResponse success(List<CommunityPostItem> list) {
         PostListResponse response = new PostListResponse();
         response.setSuccess(true);
-        response.setCode(200);
         response.setMessage("success");
-        response.setData(data);
+        response.setCode(200);
+        response.setData(list);
         return response;
     }
-
     @Data
     @ApiModel(value = "帖子项")
     public static class CommunityPostItem {
@@ -62,6 +62,7 @@ public class PostListResponse extends CommonResponse<List<PostListResponse.Commu
         @ApiModelProperty(value = "是否精华")
         private Boolean isEssence;
 
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
         @ApiModelProperty(value = "创建时间")
         private LocalDateTime createdTime;
     }

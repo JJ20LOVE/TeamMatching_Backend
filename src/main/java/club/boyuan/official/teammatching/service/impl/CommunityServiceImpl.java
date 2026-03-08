@@ -12,6 +12,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -111,18 +112,28 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
             // 设置用户信息
             User user = userMap.get(post.getUserId());
-            if (user != null) {
-                PostListResponse.UserInfo userInfo = new PostListResponse.UserInfo();
-                userInfo.setUserId(user.getUserId());
-                userInfo.setNickname(user.getNickname());
-                userInfo.setAvatar(user.getAvatarFileId() != null ? user.getAvatarFileId().toString() : null);
-                item.setUserInfo(userInfo);
-            }
+            PostListResponse.UserInfo userInfo = getUserInfo(user);
+            item.setUserInfo(userInfo);
 
             // 图片列表暂时设为空
             item.setImages(new ArrayList<>());
 
             return item;
         }).collect(Collectors.toList());
+    }
+
+    @NonNull
+    private static PostListResponse.UserInfo getUserInfo(User user) {
+        PostListResponse.UserInfo userInfo = new PostListResponse.UserInfo();
+        if (user != null) {
+            userInfo.setUserId(user.getUserId());
+            userInfo.setNickname(user.getNickname() != null ? user.getNickname() : "");
+            userInfo.setAvatar(user.getAvatarFileId() != null ? user.getAvatarFileId().toString() : "");
+        } else {
+            userInfo.setUserId(0);
+            userInfo.setNickname("");
+            userInfo.setAvatar("");
+        }
+        return userInfo;
     }
 }
