@@ -2,6 +2,7 @@ package club.boyuan.official.teammatching.controller;
 
 import club.boyuan.official.teammatching.dto.request.community.CommunityQueryRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
+import club.boyuan.official.teammatching.dto.response.community.CommentResponse;
 import club.boyuan.official.teammatching.dto.response.community.PostDetailResponse;
 import club.boyuan.official.teammatching.dto.response.community.PostListResponse;
 import club.boyuan.official.teammatching.service.CommunityService;
@@ -40,5 +41,10 @@ public class CommunityController {
         Integer currentUserId = 34343333; // 可从 token 解析
         List<PostListResponse.CommunityPostItem> posts = communityService.queryPostList(request, currentUserId);
         return PostListResponse.success(posts);
+    }
+
+    @PostMapping("/post/{postId}/comment")
+    public CommentResponse CreateComment(@PathVariable Long postId) {
+
     }
 }
