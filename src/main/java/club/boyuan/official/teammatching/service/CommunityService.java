@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.service;
 
+import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
 import com.baomidou.mybatisplus.extension.service.IService;
 import club.boyuan.official.teammatching.entity.CommunityPost;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
@@ -16,4 +17,6 @@ public interface CommunityService extends IService<CommunityPost> {
     Number createNewPost(CreatePostRequest request, Integer userId);
 
     List<PostListResponse.CommunityPostItem> queryPostList(CommunityQueryRequest request, Integer userId);
+
+    Long createNewComment(Long postId, CreateCommentRequest request, Integer userId);
 }
