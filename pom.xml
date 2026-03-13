@@ -51,7 +51,7 @@
             <optional>true</optional>
         </dependency>
         
-        <!-- Spring Boot Logging (包含Slf4j实现) -->
+        <!-- Spring Boot Logging (包含 Slf4j 实现) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-logging</artifactId>
