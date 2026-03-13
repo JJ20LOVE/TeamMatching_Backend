@@ -26,17 +26,23 @@ import club.boyuan.official.teammatching.mapper.TeamApplicationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
 import club.boyuan.official.teammatching.mapper.FavoriteMapper;
 import club.boyuan.official.teammatching.mapper.FollowMapper;
+import club.boyuan.official.teammatching.mapper.SkillTagMapper;
+import club.boyuan.official.teammatching.mapper.UserSkillRelationMapper;
 import club.boyuan.official.teammatching.service.ProjectService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -54,9 +60,12 @@ public class ProjectServiceImpl implements ProjectService {
     private final UserMapper userMapper;
     private final FavoriteMapper favoriteMapper;
     private final FollowMapper followMapper;
+    private final UserSkillRelationMapper userSkillRelationMapper;
+    private final SkillTagMapper skillTagMapper;
     
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
     public Integer createProject(Integer userId, CreateProjectRequest request) {
         log.info("创建项目，userId: {}, 项目名称：{}", userId, request.getName());
         
@@ -105,6 +114,7 @@ public class ProjectServiceImpl implements ProjectService {
     
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
     public void updateProject(Integer projectId, Integer userId, UpdateProjectRequest request) {
         log.info("更新项目，projectId: {}, userId: {}", projectId, userId);
         
@@ -337,6 +347,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
     public ApplyProjectResponse applyProject(Integer projectId, Integer userId, ApplyProjectRequest request) {
         log.info("申请加入项目，projectId: {}, userId: {}, requirementId: {}",
                 projectId, userId, request.getRequirementId());
@@ -434,6 +445,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
     public void updateProjectStatus(Integer projectId, Integer userId, Integer status) {
         log.info("更新项目状态，projectId: {}, userId: {}, status: {}", projectId, userId, status);
 
@@ -481,7 +493,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<>();
 
-        // 只展示正在招募中的项目：可根据业务需要调整
+        // 只展示正在招募中的项目
         wrapper.eq(Project::getStatus, ProjectStatusEnum.RECRUITING.getCode());
 
         if (request.getTrack() != null && !request.getTrack().isBlank()) {
@@ -617,17 +629,339 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Cacheable(cacheNames = "projectMatch", key = "#userId")
     public List<ProjectListResponse> getMatchedProjects(Integer userId) {
         log.info("获取智能匹配项目，userId: {}", userId);
 
-        // 当前实现：先简单按热度推荐正在招募中的项目，后续可接入更复杂的推荐算法
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new ResourceNotFoundException("用户不存在");
+        }
+
+        // 1) 构建用户画像：技能词 + 兴趣赛道偏好
+        Map<String, Double> userSkillWeights = buildUserSkillWeights(userId, user.getTechStack());
+        Map<String, Double> trackPreference = buildUserTrackPreference(userId);
+
+        // 2) 候选集：优先取“审核通过 + 招募中 + 未截止”的项目；不足则降级为“招募中 + 未截止”
+        List<Project> candidates = queryMatchedCandidates(true);
+        if (candidates.size() < 30) {
+            candidates = queryMatchedCandidates(false);
+        }
+        if (candidates.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 3) 批量取角色要求
+        List<Integer> projectIds = candidates.stream().map(Project::getProjectId).collect(Collectors.toList());
+        LambdaQueryWrapper<ProjectRoleRequirements> roleWrapper = new LambdaQueryWrapper<>();
+        roleWrapper.in(ProjectRoleRequirements::getProjectId, projectIds);
+        List<ProjectRoleRequirements> allRequirements = roleRequirementMapper.selectList(roleWrapper);
+        Map<Integer, List<ProjectRoleRequirements>> requirementsByProject = allRequirements.stream()
+                .collect(Collectors.groupingBy(ProjectRoleRequirements::getProjectId));
+
+        // 4) 多因子打分并排序（可解释）
+        LocalDateTime now = LocalDateTime.now();
+        List<ScoredProject> scored = new ArrayList<>();
+        for (Project project : candidates) {
+            List<ProjectRoleRequirements> reqs =
+                    requirementsByProject.getOrDefault(project.getProjectId(), Collections.emptyList());
+
+            double score = calculateMatchScore(project, reqs, userSkillWeights, trackPreference, now);
+            scored.add(new ScoredProject(project, score));
+        }
+
+        scored.sort(Comparator.comparingDouble(ScoredProject::score).reversed());
+
+        // 5) 取 TopN
+        int limit = Math.min(30, scored.size());
+        List<Project> topProjects = scored.subList(0, limit).stream().map(ScoredProject::project).toList();
+
+        return buildProjectListResponses(topProjects);
+    }
+
+    private List<Project> queryMatchedCandidates(boolean requireAuditApproved) {
         LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Project::getStatus, ProjectStatusEnum.RECRUITING.getCode());
-        wrapper.orderByDesc(Project::getViewCount, Project::getFavoriteCount);
+        if (requireAuditApproved) {
+            wrapper.eq(Project::getAuditStatus, 1);
+        }
+        wrapper.gt(Project::getDeadlineRecruit, LocalDateTime.now());
+        wrapper.orderByDesc(Project::getReleaseTime);
 
-        List<Project> projects = projectMapper.selectList(wrapper);
-        return buildProjectListResponses(projects);
+        // 先取一定量候选，避免全表扫描过大（可根据数据量调整）
+        Page<Project> page = new Page<>(1, 200);
+        Page<Project> res = projectMapper.selectPage(page, wrapper);
+        List<Project> list = res.getRecords();
+        return list == null ? new ArrayList<>() : list;
     }
+
+    /**
+     * 用户技能画像：综合 user_skill_relation(带熟练度) + User.techStack 文本解析
+     */
+    private Map<String, Double> buildUserSkillWeights(Integer userId, String techStackText) {
+        Map<String, Double> weights = new HashMap<>();
+
+        // 1) user_skill_relation -> tagName
+        LambdaQueryWrapper<club.boyuan.official.teammatching.entity.UserSkillRelation> wrapper =
+                new LambdaQueryWrapper<>();
+        wrapper.eq(club.boyuan.official.teammatching.entity.UserSkillRelation::getUserId, userId);
+        List<club.boyuan.official.teammatching.entity.UserSkillRelation> relations =
+                userSkillRelationMapper.selectList(wrapper);
+
+        if (relations != null && !relations.isEmpty()) {
+            List<Integer> tagIds = relations.stream()
+                    .map(club.boyuan.official.teammatching.entity.UserSkillRelation::getTagId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            if (!tagIds.isEmpty()) {
+                Map<Integer, String> tagIdToName = skillTagMapper.selectBatchIds(tagIds).stream()
+                        .collect(Collectors.toMap(
+                                club.boyuan.official.teammatching.entity.SkillTag::getTagId,
+                                club.boyuan.official.teammatching.entity.SkillTag::getTagName,
+                                (a, b) -> a
+                        ));
+
+                for (club.boyuan.official.teammatching.entity.UserSkillRelation rel : relations) {
+                    String name = tagIdToName.get(rel.getTagId());
+                    if (name == null || name.isBlank()) {
+                        continue;
+                    }
+                    String token = normalizeToken(name);
+                    // 熟练度：1-了解 2-熟悉 3-精通 -> 权重 0.6 / 0.85 / 1.0
+                    double w = switch (rel.getProficiency() == null ? 1 : rel.getProficiency()) {
+                        case 3 -> 1.0;
+                        case 2 -> 0.85;
+                        default -> 0.6;
+                    };
+                    weights.merge(token, w, Math::max);
+                }
+            }
+        }
+
+        // 2) techStack 文本解析（逗号/空格/顿号等）
+        for (String t : splitTokens(techStackText)) {
+            String token = normalizeToken(t);
+            if (token.isBlank()) {
+                continue;
+            }
+            // techStack 作为弱信号
+            weights.merge(token, 0.5, Math::max);
+        }
+
+        return weights;
+    }
+
+    /**
+     * 用户兴趣赛道偏好：综合 收藏项目 + 投递项目 的 belongTrack，越新权重越高
+     */
+    private Map<String, Double> buildUserTrackPreference(Integer userId) {
+        Map<String, Double> preference = new HashMap<>();
+        LocalDateTime now = LocalDateTime.now();
+
+        // 收藏：favorite.targetType=1 项目
+        LambdaQueryWrapper<Favorite> favWrapper = new LambdaQueryWrapper<>();
+        favWrapper.eq(Favorite::getUserId, userId).eq(Favorite::getTargetType, 1);
+        favWrapper.orderByDesc(Favorite::getCreatedTime);
+        Page<Favorite> favPage = new Page<>(1, 200);
+        List<Favorite> favorites = favoriteMapper.selectPage(favPage, favWrapper).getRecords();
+
+        if (favorites != null && !favorites.isEmpty()) {
+            List<Integer> ids = favorites.stream().map(Favorite::getTargetId).filter(Objects::nonNull).distinct().toList();
+            Map<Integer, Project> projectMap = ids.isEmpty()
+                    ? new HashMap<>()
+                    : projectMapper.selectBatchIds(ids).stream().collect(Collectors.toMap(Project::getProjectId, p -> p));
+
+            for (Favorite fav : favorites) {
+                Project p = projectMap.get(fav.getTargetId());
+                if (p == null || p.getBelongTrack() == null) continue;
+                double recency = timeDecay(fav.getCreatedTime(), now, 30); // 30天半衰
+                preference.merge(p.getBelongTrack(), 2.0 * recency, Double::sum); // 收藏信号更强
+            }
+        }
+
+        // 投递：team_application
+        LambdaQueryWrapper<TeamApplication> appWrapper = new LambdaQueryWrapper<>();
+        appWrapper.eq(TeamApplication::getApplicantUserId, userId);
+        appWrapper.orderByDesc(TeamApplication::getApplyTime);
+        Page<TeamApplication> appPage = new Page<>(1, 200);
+        List<TeamApplication> applications = teamApplicationMapper.selectPage(appPage, appWrapper).getRecords();
+
+        if (applications != null && !applications.isEmpty()) {
+            List<Integer> ids = applications.stream().map(TeamApplication::getProjectId).filter(Objects::nonNull).distinct().toList();
+            Map<Integer, Project> projectMap = ids.isEmpty()
+                    ? new HashMap<>()
+                    : projectMapper.selectBatchIds(ids).stream().collect(Collectors.toMap(Project::getProjectId, p -> p));
+
+            for (TeamApplication app : applications) {
+                Project p = projectMap.get(app.getProjectId());
+                if (p == null || p.getBelongTrack() == null) continue;
+                double recency = timeDecay(app.getApplyTime(), now, 45); // 45天半衰
+                preference.merge(p.getBelongTrack(), 1.2 * recency, Double::sum);
+            }
+        }
+
+        // 归一化到 0~1
+        double max = preference.values().stream().mapToDouble(v -> v).max().orElse(0.0);
+        if (max > 0) {
+            for (Map.Entry<String, Double> e : new HashMap<>(preference).entrySet()) {
+                preference.put(e.getKey(), e.getValue() / max);
+            }
+        }
+        return preference;
+    }
+
+    private double calculateMatchScore(Project project,
+                                       List<ProjectRoleRequirements> requirements,
+                                       Map<String, Double> userSkillWeights,
+                                       Map<String, Double> trackPreference,
+                                       LocalDateTime now) {
+        // A. 兴趣赛道匹配（0~1）
+        double trackScore = 0.0;
+        if (project.getBelongTrack() != null) {
+            trackScore = trackPreference.getOrDefault(project.getBelongTrack(), 0.0);
+        }
+
+        // B. 技能/角色匹配（0~1）：把项目文本向量化后，与用户技能权重做加权命中率
+        Map<String, Double> projectTokens = buildProjectTokenWeights(project, requirements);
+        double skillScore = weightedOverlap(userSkillWeights, projectTokens);
+
+        // C. 紧迫度（deadline 越近越高，0~1）
+        double urgencyScore = 0.0;
+        if (project.getDeadlineRecruit() != null) {
+            long days = Duration.between(now, project.getDeadlineRecruit()).toDays();
+            days = Math.max(0, days);
+            urgencyScore = 1.0 / (1.0 + days / 7.0); // 7天为尺度
+        }
+
+        // D. 岗位缺口（越缺人越高，0~1）
+        double vacancyScore = 0.0;
+        if (requirements != null && !requirements.isEmpty()) {
+            double sum = 0.0;
+            int cnt = 0;
+            for (ProjectRoleRequirements r : requirements) {
+                if (r.getMemberQuota() == null || r.getMemberQuota() <= 0) continue;
+                int cur = r.getCurrentMembers() == null ? 0 : r.getCurrentMembers();
+                double v = 1.0 - Math.min(1.0, (double) cur / r.getMemberQuota());
+                sum += v;
+                cnt++;
+            }
+            vacancyScore = cnt == 0 ? 0.0 : sum / cnt;
+        }
+
+        // E. 热度（0~1）：log 归一化
+        double popularityRaw =
+                Math.log1p(nullToZero(project.getViewCount())) +
+                        0.7 * Math.log1p(nullToZero(project.getFavoriteCount())) +
+                        0.6 * Math.log1p(nullToZero(project.getApplyCount()));
+        double popularityScore = 1.0 - 1.0 / (1.0 + popularityRaw); // squash 到 0~1
+
+        // F. 新鲜度（越新越高，0~1）
+        double freshnessScore = timeDecay(project.getReleaseTime(), now, 21); // 21天半衰
+
+        // 综合：强调“匹配度”为主，热度/新鲜度为辅，紧迫度/缺口做微调
+        return 0.38 * skillScore
+                + 0.18 * trackScore
+                + 0.14 * vacancyScore
+                + 0.12 * urgencyScore
+                + 0.10 * popularityScore
+                + 0.08 * freshnessScore;
+    }
+
+    private Map<String, Double> buildProjectTokenWeights(Project project, List<ProjectRoleRequirements> requirements) {
+        Map<String, Double> tokens = new HashMap<>();
+
+        // 赛道/标签是强信号
+        for (String t : splitTokens(project.getBelongTrack())) {
+            tokens.merge(normalizeToken(t), 0.8, Double::max);
+        }
+        for (String t : splitTokens(project.getTags())) {
+            tokens.merge(normalizeToken(t), 1.0, Double::max);
+        }
+
+        // 项目名称/简介/特点是中信号
+        for (String t : splitTokens(project.getName())) {
+            tokens.merge(normalizeToken(t), 0.6, Double::max);
+        }
+        for (String t : splitTokens(project.getProjectIntro())) {
+            tokens.merge(normalizeToken(t), 0.35, Double::max);
+        }
+        for (String t : splitTokens(project.getProjectFeatures())) {
+            tokens.merge(normalizeToken(t), 0.35, Double::max);
+        }
+
+        // 角色要求：role 强，recruitRequirements 次之
+        if (requirements != null) {
+            for (ProjectRoleRequirements r : requirements) {
+                for (String t : splitTokens(r.getRole())) {
+                    tokens.merge(normalizeToken(t), 0.9, Double::max);
+                }
+                for (String t : splitTokens(r.getRecruitRequirements())) {
+                    tokens.merge(normalizeToken(t), 0.5, Double::max);
+                }
+            }
+        }
+
+        // 去掉空 token
+        tokens.entrySet().removeIf(e -> e.getKey() == null || e.getKey().isBlank());
+        return tokens;
+    }
+
+    /**
+     * 加权重叠：sum(min(w_u, w_p)) / sum(w_u)
+     */
+    private double weightedOverlap(Map<String, Double> user, Map<String, Double> project) {
+        if (user == null || user.isEmpty() || project == null || project.isEmpty()) {
+            return 0.0;
+        }
+        double denom = user.values().stream().mapToDouble(v -> v).sum();
+        if (denom <= 0) return 0.0;
+
+        double num = 0.0;
+        for (Map.Entry<String, Double> e : user.entrySet()) {
+            Double pw = project.get(e.getKey());
+            if (pw == null) continue;
+            num += Math.min(e.getValue(), pw);
+        }
+        return Math.max(0.0, Math.min(1.0, num / denom));
+    }
+
+    private static int nullToZero(Integer v) {
+        return v == null ? 0 : v;
+    }
+
+    /**
+     * 指数时间衰减：halfLifeDays 半衰期；t 为空时返回 0
+     */
+    private static double timeDecay(LocalDateTime t, LocalDateTime now, int halfLifeDays) {
+        if (t == null || now == null) return 0.0;
+        long days = Math.max(0, Duration.between(t, now).toDays());
+        double lambda = Math.log(2.0) / Math.max(1.0, halfLifeDays);
+        return Math.exp(-lambda * days);
+    }
+
+    private static final Pattern TOKEN_SPLIT =
+            Pattern.compile("[,，;；、\\s/|\\\\]+");
+
+    private static List<String> splitTokens(String text) {
+        if (text == null || text.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(TOKEN_SPLIT.split(text))
+                .filter(s -> s != null && !s.isBlank())
+                .toList();
+    }
+
+    private static String normalizeToken(String raw) {
+        if (raw == null) return "";
+        String t = raw.trim().toLowerCase(Locale.ROOT);
+        // 简单清洗：去掉常见标点
+        t = t.replaceAll("[\\p{Punct}]+", "");
+        return t;
+    }
+
+    private record ScoredProject(Project project, double score) { }
 
     private List<ProjectListResponse> buildProjectListResponses(List<Project> projects) {
         if (projects == null || projects.isEmpty()) {
