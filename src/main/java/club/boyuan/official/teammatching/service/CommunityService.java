@@ -1,6 +1,8 @@
 package club.boyuan.official.teammatching.service;
 
 import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
+import club.boyuan.official.teammatching.dto.request.community.LikeRequest;
+import club.boyuan.official.teammatching.dto.response.community.LikeResponse;
 import com.baomidou.mybatisplus.extension.service.IService;
 import club.boyuan.official.teammatching.entity.CommunityPost;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
@@ -19,4 +21,6 @@ public interface CommunityService extends IService<CommunityPost> {
     List<PostListResponse.CommunityPostItem> queryPostList(CommunityQueryRequest request, Integer userId);
 
     Long createNewComment(Long postId, CreateCommentRequest request, Integer userId);
+
+    LikeResponse toggleLikeStatus(LikeRequest request, Integer userId);
 }
