@@ -4,8 +4,10 @@ import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.community.CommunityQueryRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
+import club.boyuan.official.teammatching.dto.request.community.LikeRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.community.CommentCreateVO;
+import club.boyuan.official.teammatching.dto.response.community.LikeResponse;
 import club.boyuan.official.teammatching.dto.response.community.PostDetailResponse;
 import club.boyuan.official.teammatching.dto.response.community.PostListResponse;
 import club.boyuan.official.teammatching.service.CommunityService;
@@ -61,5 +63,13 @@ public class CommunityController {
         Long commentId = communityService.createNewComment(postId, request, currentUserId);
         CommentCreateVO vo = new CommentCreateVO(commentId, "评论成功");
         return CommonResponse.ok(vo);
+    }
+
+    @PostMapping("/like")
+    public CommonResponse<LikeResponse> Like(@Valid @RequestBody LikeRequest request) {
+        Integer currentUserId = 1;
+//        Integer currentUserId = UserContextUtil.getCurrentUserId();
+        LikeResponse response = communityService.toggleLikeStatus(request, currentUserId);
+        return CommonResponse.ok(response);
     }
 }

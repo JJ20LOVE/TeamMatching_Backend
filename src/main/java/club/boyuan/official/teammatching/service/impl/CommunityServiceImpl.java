@@ -3,13 +3,17 @@ package club.boyuan.official.teammatching.service.impl;
 import club.boyuan.official.teammatching.dto.request.community.CommunityQueryRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
+import club.boyuan.official.teammatching.dto.request.community.LikeRequest;
+import club.boyuan.official.teammatching.dto.response.community.LikeResponse;
 import club.boyuan.official.teammatching.dto.response.community.PostListResponse;
 import club.boyuan.official.teammatching.entity.Comment;
 import club.boyuan.official.teammatching.entity.CommunityPost;
+import club.boyuan.official.teammatching.entity.LikeRecord;
 import club.boyuan.official.teammatching.entity.User;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.CommentMapper;
 import club.boyuan.official.teammatching.mapper.CommunityPostMapper;
+import club.boyuan.official.teammatching.mapper.LikeRecordMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
 import club.boyuan.official.teammatching.service.CommunityService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -35,10 +39,14 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
     private final UserMapper userMapper;
     private final CommentMapper commentMapper;
+    private final LikeRecordMapper likeRecordMapper;
 
-    public CommunityServiceImpl(UserMapper userMapper, CommentMapper commentMapper) {
+    public CommunityServiceImpl(UserMapper userMapper,
+                                CommentMapper commentMapper,
+                                LikeRecordMapper likeRecordMapper) {
         this.userMapper = userMapper;
         this.commentMapper = commentMapper;
+        this.likeRecordMapper = likeRecordMapper;
     }
     @Override
     public Number createNewPost(CreatePostRequest request, Integer userId) {
@@ -183,6 +191,73 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
         return comment.getCommentId().longValue();
     }
+
+    @Transactional
+    @Override
+    public LikeResponse toggleLikeStatus(LikeRequest request, Integer userId) {
+        if (request == null) {
+            throw new BusinessException("请求不能为空");
+        }
+        if (request.getTargetType() == null || request.getTargetType() <= 0) {
+            throw new BusinessException("目标类型错误");
+        }
+        if (request.getTargetId() == null || request.getTargetId() <= 0) {
+            throw new BusinessException("目标ID错误");
+        }
+
+        LambdaQueryWrapper<LikeRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(LikeRecord::getUserId, userId)
+                .eq(LikeRecord::getTargetType, request.getTargetType())
+                .eq(LikeRecord::getTargetId, request.getTargetId());
+        LikeRecord exist = likeRecordMapper.selectOne(wrapper);
+
+        ToggleResult toggleResult = applyLikeToggle(exist, userId, request.getTargetType(), request.getTargetId());
+        Integer likeCount;
+
+        if (request.getTargetType() == 1) {
+            CommunityPost post = this.getById(request.getTargetId());
+            if (post == null) {
+                throw new BusinessException("帖子不存在");
+            }
+            int current = post.getLikeCount() == null ? 0 : post.getLikeCount();
+            post.setLikeCount(Math.max(0, current + toggleResult.delta()));
+            post.setUpdateTime(LocalDateTime.now());
+            this.updateById(post);
+            likeCount = post.getLikeCount();
+        } else if (request.getTargetType() == 2) {
+            Comment comment = commentMapper.selectById(request.getTargetId());
+            if (comment == null) {
+                throw new BusinessException("评论不存在");
+            }
+            int current = comment.getLikeCount() == null ? 0 : comment.getLikeCount();
+            comment.setLikeCount(Math.max(0, current + toggleResult.delta()));
+            comment.setUpdateTime(LocalDateTime.now());
+            commentMapper.updateById(comment);
+            likeCount = comment.getLikeCount();
+        } else {
+            throw new BusinessException("目标类型错误");
+        }
+
+        return new LikeResponse(toggleResult.isLiked(), likeCount);
+    }
+
+    private ToggleResult applyLikeToggle(LikeRecord exist, Integer userId, Integer targetType, Integer targetId) {
+        if (exist == null) {
+            LikeRecord record = new LikeRecord();
+            record.setUserId(userId);
+            record.setTargetType(targetType);
+            record.setTargetId(targetId);
+            record.setCreatedTime(LocalDateTime.now());
+            likeRecordMapper.insert(record);
+            return new ToggleResult(true, 1);
+        }
+        likeRecordMapper.deleteById(exist.getLikeId());
+        return new ToggleResult(false, -1);
+    }
+
+    private record ToggleResult(boolean isLiked, int delta) {
+    }
+
     @NonNull
     private static PostListResponse.UserInfo getUserInfo(User user) {
         PostListResponse.UserInfo userInfo = new PostListResponse.UserInfo();
