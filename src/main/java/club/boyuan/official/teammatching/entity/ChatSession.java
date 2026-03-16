@@ -3,6 +3,8 @@ package club.boyuan.official.teammatching.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+
+import java.io.Serial;
 import java.time.LocalDateTime;
 import java.io.Serializable;
 import io.swagger.annotations.ApiModel;
@@ -10,6 +12,7 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
+import com.baomidou.mybatisplus.annotation.TableField;
 
 /**
  * <p>
@@ -26,6 +29,7 @@ import lombok.experimental.Accessors;
 @ApiModel(value="ChatSession对象", description="会话表")
 public class ChatSession implements Serializable {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     @ApiModelProperty(value = "会话ID，主键")
@@ -52,6 +56,10 @@ public class ChatSession implements Serializable {
 
     @ApiModelProperty(value = "用户2未读数")
     private Integer user2Unread;
+
+    @ApiModelProperty(value = "招募沟通状态：communicating/offer/reject")
+    @TableField("recruit_status")
+    private String recruitStatus;
 
     @ApiModelProperty(value = "状态：1-正常 0-删除")
     private Integer status;

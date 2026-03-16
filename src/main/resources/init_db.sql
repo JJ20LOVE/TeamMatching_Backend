@@ -380,6 +380,7 @@ CREATE TABLE chat_session (
                               last_msg_time TIMESTAMP NULL COMMENT '最后消息时间',
                               user1_unread INT DEFAULT 0 COMMENT '用户1未读数',
                               user2_unread INT DEFAULT 0 COMMENT '用户2未读数',
+                              recruit_status VARCHAR(32) DEFAULT 'communicating' COMMENT '招募沟通状态：communicating/offer/reject',
 
                               status TINYINT DEFAULT 1 COMMENT '状态：1-正常 0-删除',
                               update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
