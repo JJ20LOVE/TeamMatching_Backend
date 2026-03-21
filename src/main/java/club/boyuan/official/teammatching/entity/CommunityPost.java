@@ -59,7 +59,7 @@ public class CommunityPost implements Serializable {
     @ApiModelProperty(value = "是否精华")
     private Boolean isEssence;
 
-    @ApiModelProperty(value = "状态：1-正常 0-删除 2-违规下架")
+    @ApiModelProperty(value = "状态：0-待审核 1-正常 2-违规下架 3-删除")
     private Integer status;
 
     @ApiModelProperty(value = "发布时间")

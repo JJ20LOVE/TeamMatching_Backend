@@ -5,30 +5,40 @@ import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequ
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
 import club.boyuan.official.teammatching.dto.request.community.LikeRequest;
 import club.boyuan.official.teammatching.dto.response.community.LikeResponse;
+import club.boyuan.official.teammatching.dto.response.community.PostPageResult;
 import club.boyuan.official.teammatching.dto.response.community.PostListResponse;
 import club.boyuan.official.teammatching.entity.Comment;
 import club.boyuan.official.teammatching.entity.CommunityPost;
+import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.entity.LikeRecord;
+import club.boyuan.official.teammatching.entity.PostImageRelation;
 import club.boyuan.official.teammatching.entity.User;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.CommentMapper;
 import club.boyuan.official.teammatching.mapper.CommunityPostMapper;
+import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.mapper.LikeRecordMapper;
+import club.boyuan.official.teammatching.mapper.PostImageRelationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
 import club.boyuan.official.teammatching.service.CommunityService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import org.springframework.beans.BeanUtils;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -40,60 +50,66 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
     private final UserMapper userMapper;
     private final CommentMapper commentMapper;
     private final LikeRecordMapper likeRecordMapper;
+    private final FileResourceMapper fileResourceMapper;
+    private final PostImageRelationMapper postImageRelationMapper;
 
     public CommunityServiceImpl(UserMapper userMapper,
                                 CommentMapper commentMapper,
-                                LikeRecordMapper likeRecordMapper) {
+                                LikeRecordMapper likeRecordMapper,
+                                FileResourceMapper fileResourceMapper,
+                                PostImageRelationMapper postImageRelationMapper) {
         this.userMapper = userMapper;
         this.commentMapper = commentMapper;
         this.likeRecordMapper = likeRecordMapper;
+        this.fileResourceMapper = fileResourceMapper;
+        this.postImageRelationMapper = postImageRelationMapper;
     }
+
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Number createNewPost(CreatePostRequest request, Integer userId) {
-        // 1. 实例化实体类
+        if (request == null) {
+            throw new BusinessException("请求不能为空");
+        }
+
         CommunityPost post = new CommunityPost();
+        post.setUserId(userId);
+        post.setSection(request.getSection());
+        post.setTitle(request.getTitle());
+        post.setContent(request.getContent());
+        post.setStatus(0); // 发帖后进入审核态
+        post.setViewCount(0);
+        post.setLikeCount(0);
+        post.setCommentCount(0);
+        post.setIsTop(false);
+        post.setIsEssence(false);
+        post.setCreatedTime(LocalDateTime.now());
+        post.setUpdateTime(LocalDateTime.now());
 
-        // 2. 属性拷贝 (将 Request 中的 section, title, content, images 拷贝到 post)
-        // 关键：因为我们之前把 Entity 里的 images 改成了 List<String>，这里可以直接拷贝！
-        BeanUtils.copyProperties(request, post);
+        boolean saved = this.save(post);
+        if (!saved || post.getPostId() == null) {
+            throw new BusinessException("帖子发布失败");
+        }
 
-        // 3. 填充后端控制的字段
-        // postId由后端自动生成
-        post.setUserId(userId); // 添加UserId
-        // section，title，content，images由前端传入
-        post.setStatus(1);
-        post.setViewCount(0); // viewCount
-        post.setLikeCount(0); // likeCount
-        post.setCommentCount(0); // commentCount
-        post.setIsTop(false); // isTop
-        post.setIsEssence(false); // isEssence
-        post.setCreatedTime(LocalDateTime.now()); // createdTime
-        post.setUpdateTime(LocalDateTime.now()); // updateTime
-        // 4. 调用 MyBatis-Plus 提供的 save 方法
-        // 这一步会触发 JacksonTypeHandler，自动把 List<String> 转为数据库里的 JSON 字符串
-        this.save(post);
+        bindPostImages(post.getPostId(), request.getImages());
         return post.getPostId();
     }
 
     @Override
-    public List<PostListResponse.CommunityPostItem> queryPostList(CommunityQueryRequest request, Integer userId) {
+    public PostPageResult queryPostList(CommunityQueryRequest request, Integer userId) {
         LambdaQueryWrapper<CommunityPost> wrapper = new LambdaQueryWrapper<>();
 
-        // 板块筛选
         if (request.getSection() != null) {
             wrapper.eq(CommunityPost::getSection, request.getSection().getCode());
         }
 
-        // 关键词搜索
-        if (request.getKeyword() != null && !request.getKeyword().isEmpty()) {
+        if (StringUtils.hasText(request.getKeyword())) {
             wrapper.and(w -> w.like(CommunityPost::getTitle, request.getKeyword())
                     .or().like(CommunityPost::getContent, request.getKeyword()));
         }
 
-        // 状态筛选：只查询正常状态
-        wrapper.eq(CommunityPost::getStatus, 1);
+        wrapper.eq(CommunityPost::getStatus, 1); // 仅展示审核通过帖子
 
-        // 排序
         if (request.getType() != null) {
             switch (request.getType()) {
                 case LATEST -> wrapper.orderByDesc(CommunityPost::getCreatedTime);
@@ -107,87 +123,105 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
             wrapper.orderByDesc(CommunityPost::getCreatedTime);
         }
 
-        // 分页查询
-        // 使用 Optional 确保即便 request 为空或参数为空，也能有默认值
         long current = Optional.ofNullable(request.getPage()).map(Integer::longValue).orElse(1L);
         long size = Optional.ofNullable(request.getSize()).map(Integer::longValue).orElse(10L);
 
         Page<CommunityPost> pageParam = new Page<>(current, size);
         Page<CommunityPost> postPage = this.page(pageParam, wrapper);
 
+        PostPageResult result = new PostPageResult();
+        result.setCurrent(postPage.getCurrent());
+        result.setSize(postPage.getSize());
+        result.setTotal(postPage.getTotal());
+        result.setPages(postPage.getPages());
+
         List<CommunityPost> posts = postPage.getRecords();
         if (posts == null || posts.isEmpty()) {
-            return new ArrayList<>();
+            result.setRecords(new ArrayList<>());
+            return result;
         }
 
-        // 获取用户信息
-        List<Integer> userIds = posts.stream().map(CommunityPost::getUserId).distinct().collect(Collectors.toList());
+        List<Integer> userIds = posts.stream()
+                .map(CommunityPost::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
         List<User> users = userMapper.selectBatchIds(userIds);
         Map<Integer, User> userMap = users.stream().collect(Collectors.toMap(User::getUserId, u -> u));
+        Map<Long, String> avatarUrlMap = buildAvatarUrlMap(users);
+        Map<Integer, List<String>> postImageMap = buildPostImageMap(posts);
 
-        // 组装响应
-        return posts.stream().map(post -> {
+        List<PostListResponse.CommunityPostItem> items = posts.stream().map(post -> {
             PostListResponse.CommunityPostItem item = new PostListResponse.CommunityPostItem();
-            BeanUtils.copyProperties(post, item);
-
-            // 设置用户信息
+            item.setPostId(post.getPostId());
+            item.setSection(post.getSection());
+            item.setTitle(post.getTitle());
+            item.setContent(post.getContent());
+            item.setViewCount(post.getViewCount());
+            item.setLikeCount(post.getLikeCount());
+            item.setCommentCount(post.getCommentCount());
+            item.setIsTop(post.getIsTop());
+            item.setIsEssence(post.getIsEssence());
+            item.setCreatedTime(post.getCreatedTime());
             User user = userMap.get(post.getUserId());
-            PostListResponse.UserInfo userInfo = getUserInfo(user);
-            item.setUserInfo(userInfo);
-
-            // 图片列表暂时设为空
-            item.setImages(new ArrayList<>());
-
+            item.setUserInfo(getUserInfo(user, avatarUrlMap));
+            item.setImages(postImageMap.getOrDefault(post.getPostId(), new ArrayList<>()));
             return item;
         }).collect(Collectors.toList());
+
+        result.setRecords(items);
+        return result;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createNewComment(Long postId, CreateCommentRequest request, Integer userId) {
-        // 1. 基础校验：推荐使用 Assert 语法或自定义工具类，让代码更清爽
-        if (postId == null || postId <= 0) throw new BusinessException("帖子ID错误");
+        if (postId == null || postId <= 0) {
+            throw new BusinessException("帖子ID错误");
+        }
         if (request == null || request.getContent() == null || request.getContent().isBlank()) {
             throw new BusinessException("评论内容不能为空");
         }
 
-        // 2. 帖子存在性检查
         CommunityPost post = this.getById(postId);
         if (post == null) {
             throw new BusinessException("帖子已不存在");
         }
-
-        // 3. 处理可选参数 parentId (修复外键报错的关键)
-        Integer parentId = request.getParentId();
-        if (parentId != null && parentId > 0) {
-            // 进阶：如果传了 parentId，最好查一下父评论是否存在，防止非法 ID 攻击
-            Comment parent = commentMapper.selectById(parentId);
-            if (parent == null) throw new BusinessException("回复的评论不存在");
-        } else {
-            parentId = null; // 确保是一级评论
+        if (!Objects.equals(post.getStatus(), 1)) {
+            throw new BusinessException("帖子正在审核中，暂不可评论");
         }
 
-        // 4. 构建评论对象
+        Integer parentId = request.getParentId();
+        if (parentId != null && parentId > 0) {
+            Comment parent = commentMapper.selectById(parentId);
+            if (parent == null) {
+                throw new BusinessException("回复的评论不存在");
+            }
+            if (!Objects.equals(parent.getPostId(), Math.toIntExact(postId))) {
+                throw new BusinessException("父评论不属于当前帖子");
+            }
+        } else {
+            parentId = null;
+        }
+
         Comment comment = new Comment();
         comment.setPostId(Math.toIntExact(postId));
         comment.setUserId(userId);
         comment.setParentId(parentId);
         comment.setContent(request.getContent());
         comment.setLikeCount(0);
-        comment.setStatus(1); // 建议默认 1 (正常)，0 通常留给“删除”或“待审”
+        comment.setStatus(1);
         comment.setCreatedTime(LocalDateTime.now());
+        comment.setUpdateTime(LocalDateTime.now());
 
-        // 5. 执行插入
         int insertResult = commentMapper.insert(comment);
         if (insertResult <= 0 || comment.getCommentId() == null) {
             throw new BusinessException("评论发布失败");
         }
 
-        // 6. 更新帖子评论计数 (这里必须持久化！)
-        // 进阶技巧：使用 SQL 层面自增（post.setCommentCount(null) + updateWrapper）
-        // 或者直接简单地：
         post.setCommentCount((post.getCommentCount() == null ? 0 : post.getCommentCount()) + 1);
-        this.updateById(post); // 千万别忘了这一步！
+        post.setUpdateTime(LocalDateTime.now());
+        this.updateById(post);
 
         return comment.getCommentId().longValue();
     }
@@ -219,6 +253,9 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
             if (post == null) {
                 throw new BusinessException("帖子不存在");
             }
+            if (!Objects.equals(post.getStatus(), 1)) {
+                throw new BusinessException("帖子正在审核中，暂不可点赞");
+            }
             int current = post.getLikeCount() == null ? 0 : post.getLikeCount();
             post.setLikeCount(Math.max(0, current + toggleResult.delta()));
             post.setUpdateTime(LocalDateTime.now());
@@ -228,6 +265,9 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
             Comment comment = commentMapper.selectById(request.getTargetId());
             if (comment == null) {
                 throw new BusinessException("评论不存在");
+            }
+            if (!Objects.equals(comment.getStatus(), 1)) {
+                throw new BusinessException("评论已不可点赞");
             }
             int current = comment.getLikeCount() == null ? 0 : comment.getLikeCount();
             comment.setLikeCount(Math.max(0, current + toggleResult.delta()));
@@ -258,13 +298,127 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
     private record ToggleResult(boolean isLiked, int delta) {
     }
 
+    private void bindPostImages(Integer postId, List<String> images) {
+        if (postId == null || images == null || images.isEmpty()) {
+            return;
+        }
+
+        Set<String> uniqueUrls = images.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (uniqueUrls.isEmpty()) {
+            return;
+        }
+
+        int sort = 0;
+        for (String url : uniqueUrls) {
+            LambdaQueryWrapper<FileResource> fileQuery = new LambdaQueryWrapper<>();
+            fileQuery.eq(FileResource::getFileUrl, url)
+                    .eq(FileResource::getIsDeleted, false)
+                    .eq(FileResource::getTargetType, 3)
+                    .last("LIMIT 1");
+            List<FileResource> candidates = fileResourceMapper.selectList(fileQuery);
+            if (candidates == null || candidates.isEmpty()) {
+                throw new BusinessException("图片资源不存在: " + url);
+            }
+            FileResource fileResource = candidates.get(0);
+
+            fileResource.setTargetType(3);
+            fileResource.setTargetId(postId);
+            fileResource.setIsTemp(false);
+            fileResource.setUpdateTime(LocalDateTime.now());
+            fileResourceMapper.updateById(fileResource);
+
+            PostImageRelation relation = new PostImageRelation();
+            relation.setPostId(postId);
+            relation.setFileId(fileResource.getFileId());
+            relation.setSortOrder(sort++);
+            relation.setCreatedTime(LocalDateTime.now());
+            postImageRelationMapper.insert(relation);
+        }
+    }
+
+    private Map<Integer, List<String>> buildPostImageMap(List<CommunityPost> posts) {
+        if (posts == null || posts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<Integer> postIds = posts.stream()
+                .map(CommunityPost::getPostId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (postIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        LambdaQueryWrapper<PostImageRelation> relationQuery = new LambdaQueryWrapper<>();
+        relationQuery.in(PostImageRelation::getPostId, postIds)
+                .orderByAsc(PostImageRelation::getSortOrder)
+                .orderByAsc(PostImageRelation::getRelationId);
+        List<PostImageRelation> relations = postImageRelationMapper.selectList(relationQuery);
+        if (relations == null || relations.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<Long> fileIds = relations.stream()
+                .map(PostImageRelation::getFileId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (fileIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<FileResource> files = fileResourceMapper.selectBatchIds(fileIds);
+        Map<Long, String> fileUrlMap = files.stream()
+                .filter(f -> !Boolean.TRUE.equals(f.getIsDeleted()))
+                .filter(f -> StringUtils.hasText(f.getFileUrl()))
+                .collect(Collectors.toMap(FileResource::getFileId, FileResource::getFileUrl, (a, b) -> a));
+
+        Map<Integer, List<String>> result = new HashMap<>();
+        for (PostImageRelation relation : relations) {
+            String url = fileUrlMap.get(relation.getFileId());
+            if (!StringUtils.hasText(url)) {
+                continue;
+            }
+            result.computeIfAbsent(relation.getPostId(), key -> new ArrayList<>()).add(url);
+        }
+        return result;
+    }
+
+    private Map<Long, String> buildAvatarUrlMap(List<User> users) {
+        if (users == null || users.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<Long> avatarFileIds = users.stream()
+                .map(User::getAvatarFileId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (avatarFileIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<FileResource> avatarFiles = fileResourceMapper.selectBatchIds(avatarFileIds);
+        return avatarFiles.stream()
+                .filter(f -> !Boolean.TRUE.equals(f.getIsDeleted()))
+                .filter(f -> StringUtils.hasText(f.getFileUrl()))
+                .collect(Collectors.toMap(FileResource::getFileId, FileResource::getFileUrl, (a, b) -> a));
+    }
+
     @NonNull
-    private static PostListResponse.UserInfo getUserInfo(User user) {
+    private static PostListResponse.UserInfo getUserInfo(User user, Map<Long, String> avatarUrlMap) {
         PostListResponse.UserInfo userInfo = new PostListResponse.UserInfo();
         if (user != null) {
             userInfo.setUserId(user.getUserId());
             userInfo.setNickname(user.getNickname() != null ? user.getNickname() : "");
-            userInfo.setAvatar(user.getAvatarFileId() != null ? user.getAvatarFileId().toString() : "");
+            String avatarUrl = user.getAvatarFileId() == null
+                    ? ""
+                    : avatarUrlMap.getOrDefault(user.getAvatarFileId(), "");
+            userInfo.setAvatar(avatarUrl);
         } else {
             userInfo.setUserId(0);
             userInfo.setNickname("");

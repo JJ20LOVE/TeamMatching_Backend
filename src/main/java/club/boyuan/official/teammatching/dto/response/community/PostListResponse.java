@@ -18,12 +18,42 @@ import java.util.List;
 @ApiModel(value = "帖子列表响应")
 public class PostListResponse extends CommonResponse<List<PostListResponse.CommunityPostItem>> {
 
+    @ApiModelProperty(value = "当前页")
+    private Long current;
+
+    @ApiModelProperty(value = "每页条数")
+    private Long size;
+
+    @ApiModelProperty(value = "总条数")
+    private Long total;
+
+    @ApiModelProperty(value = "总页数")
+    private Long pages;
+
     public static PostListResponse success(List<CommunityPostItem> list) {
         PostListResponse response = new PostListResponse();
+        long count = list == null ? 0L : list.size();
         response.setSuccess(true);
         response.setMessage("success");
         response.setCode(200);
         response.setData(list);
+        response.setCurrent(1L);
+        response.setSize(count);
+        response.setTotal(count);
+        response.setPages(count == 0 ? 0L : 1L);
+        return response;
+    }
+
+    public static PostListResponse success(PostPageResult pageResult) {
+        PostListResponse response = new PostListResponse();
+        response.setSuccess(true);
+        response.setMessage("success");
+        response.setCode(200);
+        response.setData(pageResult.getRecords());
+        response.setCurrent(pageResult.getCurrent());
+        response.setSize(pageResult.getSize());
+        response.setTotal(pageResult.getTotal());
+        response.setPages(pageResult.getPages());
         return response;
     }
     @Data

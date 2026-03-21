@@ -456,7 +456,7 @@ CREATE TABLE community_post (
 
                                 is_top BOOLEAN DEFAULT FALSE COMMENT '是否置顶',
                                 is_essence BOOLEAN DEFAULT FALSE COMMENT '是否精华',
-                                status TINYINT DEFAULT 1 COMMENT '状态：1-正常 0-删除 2-违规下架',
+                                status TINYINT DEFAULT 0 COMMENT '状态：0-待审核 1-正常 2-违规下架 3-删除',
 
                                 created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
                                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
