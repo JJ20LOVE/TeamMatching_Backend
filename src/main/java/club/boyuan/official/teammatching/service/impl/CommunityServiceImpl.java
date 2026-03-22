@@ -183,11 +183,11 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
             throw new BusinessException("评论发布失败");
         }
 
-        // 6. 更新帖子评论计数 (这里必须持久化！)
-        // 进阶技巧：使用 SQL 层面自增（post.setCommentCount(null) + updateWrapper）
-        // 或者直接简单地：
-        post.setCommentCount((post.getCommentCount() == null ? 0 : post.getCommentCount()) + 1);
-        this.updateById(post); // 千万别忘了这一步！
+        // 6. 更新帖子评论计数 (使用数据库层面自增，避免并发问题)
+        int updateResult = commentMapper.incrementCommentCount(post.getPostId());
+        if (updateResult <= 0) {
+            throw new BusinessException("更新帖子评论计数失败");
+        }
 
         return comment.getCommentId().longValue();
     }
