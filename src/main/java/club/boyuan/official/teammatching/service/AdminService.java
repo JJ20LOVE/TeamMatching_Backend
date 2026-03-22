@@ -3,10 +3,7 @@ package club.boyuan.official.teammatching.service;
 import club.boyuan.official.teammatching.dto.request.admin.AuditRequest;
 import club.boyuan.official.teammatching.dto.request.admin.AuditVerifyRequest;
 import club.boyuan.official.teammatching.dto.request.admin.ContentAuditRequest;
-import club.boyuan.official.teammatching.dto.response.admin.AuditListResponse;
-import club.boyuan.official.teammatching.dto.response.admin.AuditVerifyResponse;
-import club.boyuan.official.teammatching.dto.response.admin.ContentAuditResponse;
-import club.boyuan.official.teammatching.dto.response.admin.ContentVerifyResponse;
+import club.boyuan.official.teammatching.dto.response.admin.*;
 
 /**
  * 管理服务接口
@@ -39,4 +36,6 @@ public interface AdminService {
     ContentAuditResponse getAuditContents(ContentAuditRequest request);
 
     ContentVerifyResponse verifyContent(String contentType, Integer contentId, AuditVerifyRequest request);
+
+    StatisticsResponse getStatistics();
 }

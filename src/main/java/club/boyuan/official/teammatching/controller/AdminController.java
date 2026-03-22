@@ -5,10 +5,7 @@ import club.boyuan.official.teammatching.dto.request.admin.AuditRequest;
 import club.boyuan.official.teammatching.dto.request.admin.AuditVerifyRequest;
 import club.boyuan.official.teammatching.dto.request.admin.ContentAuditRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
-import club.boyuan.official.teammatching.dto.response.admin.AuditListResponse;
-import club.boyuan.official.teammatching.dto.response.admin.AuditVerifyResponse;
-import club.boyuan.official.teammatching.dto.response.admin.ContentAuditResponse;
-import club.boyuan.official.teammatching.dto.response.admin.ContentVerifyResponse;
+import club.boyuan.official.teammatching.dto.response.admin.*;
 import club.boyuan.official.teammatching.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
@@ -81,6 +78,11 @@ public class AdminController {
     ){
         ContentVerifyResponse response = adminService.verifyContent(contentType, contentId, request);
         return CommonResponse.ok(response);
+    }
+
+    @GetMapping("stats/dashboard")
+    public CommonResponse<StatisticsResponse> getDashboardStats() {
+        return CommonResponse.ok(adminService.getStatistics());
     }
 
 }

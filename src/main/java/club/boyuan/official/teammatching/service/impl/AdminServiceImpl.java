@@ -4,10 +4,7 @@ import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.admin.AuditRequest;
 import club.boyuan.official.teammatching.dto.request.admin.AuditVerifyRequest;
 import club.boyuan.official.teammatching.dto.request.admin.ContentAuditRequest;
-import club.boyuan.official.teammatching.dto.response.admin.AuditListResponse;
-import club.boyuan.official.teammatching.dto.response.admin.AuditVerifyResponse;
-import club.boyuan.official.teammatching.dto.response.admin.ContentAuditResponse;
-import club.boyuan.official.teammatching.dto.response.admin.ContentVerifyResponse;
+import club.boyuan.official.teammatching.dto.response.admin.*;
 import club.boyuan.official.teammatching.entity.*;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.exception.ResourceNotFoundException;
@@ -39,6 +36,7 @@ public class AdminServiceImpl implements AdminService {
     private final ProjectMapper projectMapper;
     private final CommunityPostMapper communityPostMapper;
     private final CommentMapper commentMapper;
+    private final TeamMemberMapper teamMemberMapper;
 
     @Override
     public AuditListResponse getPendingAuthList(AuditRequest request) {
@@ -443,5 +441,82 @@ public class AdminServiceImpl implements AdminService {
         }
 
         return new ContentVerifyResponse("审核完成");
+    }
+
+    @Override
+    public StatisticsResponse getStatistics() {
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime todayEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(999999999);
+
+        // 1. 计算日活跃用户数 (DAU) - 今天登录过的用户
+        LambdaQueryWrapper<User> dauQuery = new LambdaQueryWrapper<>();
+        dauQuery.between(User::getLastLoginTime, todayStart, todayEnd);
+        Integer dau = Math.toIntExact(userMapper.selectCount(dauQuery));
+
+        // 2. 计算今日新增用户数
+        LambdaQueryWrapper<User> newUsersQuery = new LambdaQueryWrapper<>();
+        newUsersQuery.between(User::getCreatedTime, todayStart, todayEnd);
+        Integer newUsers = Math.toIntExact(userMapper.selectCount(newUsersQuery));
+
+        // 3. 计算今日发布的项目数
+        LambdaQueryWrapper<Project> projectsQuery = new LambdaQueryWrapper<>();
+        projectsQuery.between(Project::getReleaseTime, todayStart, todayEnd);
+        Integer projectsPublished = Math.toIntExact(projectMapper.selectCount(projectsQuery));
+
+        // 4. 计算组建的团队数 (统计今日加入且状态为"在队"的团队成员数)
+        LambdaQueryWrapper<TeamMember> teamsQuery = new LambdaQueryWrapper<>();
+        teamsQuery.between(TeamMember::getJoinTime, todayStart, todayEnd)
+                .eq(TeamMember::getStatus, 0); // 0-在队
+        Integer teamsFormed = Math.toIntExact(teamMemberMapper.selectCount(teamsQuery));
+
+        // 5. 计算内容审核通过率
+        // 统计所有已审核的项目、帖子、评论的通过率
+        double contentAuditPassRate = calculateContentAuditPassRate();
+
+        return new StatisticsResponse(dau, newUsers, projectsPublished, teamsFormed, contentAuditPassRate);
+    }
+
+    /**
+     * 计算内容审核通过率
+     * 统计项目、帖子、评论的审核通过率
+     */
+    private double calculateContentAuditPassRate() {
+        // 统计项目审核情况
+        LambdaQueryWrapper<Project> projectAuditedQuery = new LambdaQueryWrapper<>();
+        projectAuditedQuery.in(Project::getAuditStatus, 1, 2); // 1-通过, 2-驳回
+        long totalProjectsAudited = projectMapper.selectCount(projectAuditedQuery);
+
+        LambdaQueryWrapper<Project> projectPassedQuery = new LambdaQueryWrapper<>();
+        projectPassedQuery.eq(Project::getAuditStatus, 1); // 1-通过
+        long projectsPassed = projectMapper.selectCount(projectPassedQuery);
+
+        // 统计帖子审核情况 (status: 1-正常, 2-违规下架)
+        LambdaQueryWrapper<CommunityPost> postAuditedQuery = new LambdaQueryWrapper<>();
+        postAuditedQuery.in(CommunityPost::getStatus, 1, 2); // 1-正常, 2-违规下架
+        long totalPostsAudited = communityPostMapper.selectCount(postAuditedQuery);
+
+        LambdaQueryWrapper<CommunityPost> postPassedQuery = new LambdaQueryWrapper<>();
+        postPassedQuery.eq(CommunityPost::getStatus, 1); // 1-正常
+        long postsPassed = communityPostMapper.selectCount(postPassedQuery);
+
+        // 统计评论审核情况 (status: 1-正常, 0-删除)
+        LambdaQueryWrapper<Comment> commentAuditedQuery = new LambdaQueryWrapper<>();
+        commentAuditedQuery.in(Comment::getStatus, 0, 1); // 0-删除, 1-正常
+        long totalCommentsAudited = commentMapper.selectCount(commentAuditedQuery);
+
+        LambdaQueryWrapper<Comment> commentPassedQuery = new LambdaQueryWrapper<>();
+        commentPassedQuery.eq(Comment::getStatus, 1); // 1-正常
+        long commentsPassed = commentMapper.selectCount(commentPassedQuery);
+
+        // 计算总体通过率
+        long totalAudited = totalProjectsAudited + totalPostsAudited + totalCommentsAudited;
+        long totalPassed = projectsPassed + postsPassed + commentsPassed;
+
+        if (totalAudited == 0) {
+            return 0.0;
+        }
+
+        // 返回通过率，保留两位小数
+        return Math.round((double) totalPassed / totalAudited * 100) / 100.0;
     }
 }
