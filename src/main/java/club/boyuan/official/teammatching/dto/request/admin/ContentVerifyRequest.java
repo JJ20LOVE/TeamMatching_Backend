@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.dto.request.admin;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,10 +11,14 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ContentAuditRequest {
+public class ContentVerifyRequest {
 
     /**
-     * 内容类型：project/post/comment
+     * 审核结果：1-通过 2-驳回
+     * 理由：驳回/下架原因
      */
-    private String type;
+    @NotNull
+    private Integer result;
+
+    private String reason;
 }

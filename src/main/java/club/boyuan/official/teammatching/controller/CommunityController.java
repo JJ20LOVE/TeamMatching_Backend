@@ -49,7 +49,8 @@ public class CommunityController {
     @GetMapping("/posts")
     public PostListResponse getPosts(@Valid CommunityQueryRequest request,
                                      @RequestHeader(value = "Authorization", required = false) String token) {
-//      Integer currentUserId = UserContextUtil.getCurrentUserId();
+        //  Integer currentUserId = UserContextUtil.getCurrentUserId();
+        //  TODO: 临时用户Id,生产环境需修改
         Integer currentUserId = 1;
         List<PostListResponse.CommunityPostItem> posts = communityService.queryPostList(request, currentUserId);
         return PostListResponse.success(posts);
@@ -59,6 +60,7 @@ public class CommunityController {
     public CommonResponse<CommentCreateVO> CreateComment(@PathVariable @NotNull(message = "帖子ID不能为空") @Min(1) Long postId,
                                                          @Valid @RequestBody CreateCommentRequest request) {
         //  Integer currentUserId = UserContextUtil.getCurrentUserId();
+        //  TODO: 临时用户Id,生产环境需修改
         Integer currentUserId = 1;
         Long commentId = communityService.createNewComment(postId, request, currentUserId);
         CommentCreateVO vo = new CommentCreateVO(commentId, "评论成功");

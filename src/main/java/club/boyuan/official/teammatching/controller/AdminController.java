@@ -3,9 +3,12 @@ package club.boyuan.official.teammatching.controller;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.dto.request.admin.AuditRequest;
 import club.boyuan.official.teammatching.dto.request.admin.AuditVerifyRequest;
+import club.boyuan.official.teammatching.dto.request.admin.ContentAuditRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.admin.AuditListResponse;
 import club.boyuan.official.teammatching.dto.response.admin.AuditVerifyResponse;
+import club.boyuan.official.teammatching.dto.response.admin.ContentAuditResponse;
+import club.boyuan.official.teammatching.dto.response.admin.ContentVerifyResponse;
 import club.boyuan.official.teammatching.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
@@ -17,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/admin")
-//@Validated
+//@Validated  // TODO: 验证参数有效性，生产环境需要开启
 @RequiredArgsConstructor
 //@NeedLogin  // TODO: 临时注释用于测试，生产环境需要取消注释
 public class AdminController {
@@ -51,4 +54,33 @@ public class AdminController {
         AuditVerifyResponse response = adminService.auditAuth(authId, request);
         return CommonResponse.ok(response);
     }
+
+    /**
+     * 获取待审核内容
+     *
+     * @param request 内容审核请求（包含 type: project/post/comment）
+     * @return 待审核内容列表
+     */
+    @GetMapping("/audit/contents")
+    public CommonResponse<ContentAuditResponse> getAuditContents(
+            @ModelAttribute ContentAuditRequest request) {
+        ContentAuditResponse response = adminService.getAuditContents(request);
+        return CommonResponse.ok(response);
+    }
+
+    /**
+     * 审核认证内容
+     * @param contentType
+     * @return 审核结果
+     */
+    @PostMapping("audit/{contentType}/{contentId}")
+    public CommonResponse<ContentVerifyResponse> auditContent(
+            @PathVariable String contentType,
+            @PathVariable Integer contentId,
+            @RequestBody @Validated AuditVerifyRequest request
+    ){
+        ContentVerifyResponse response = adminService.verifyContent(contentType, contentId, request);
+        return CommonResponse.ok(response);
+    }
+
 }

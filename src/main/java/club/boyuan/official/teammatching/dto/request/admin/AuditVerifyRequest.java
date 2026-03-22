@@ -31,6 +31,10 @@ public class AuditVerifyRequest {
      */
     private List<MaterialResultDTO> materialResults;
 
+    public Object getReason() {
+        return remark;
+    }
+
     /**
      * 材料审核结果DTO
      */

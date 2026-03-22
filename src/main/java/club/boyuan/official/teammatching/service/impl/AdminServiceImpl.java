@@ -3,16 +3,15 @@ package club.boyuan.official.teammatching.service.impl;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.admin.AuditRequest;
 import club.boyuan.official.teammatching.dto.request.admin.AuditVerifyRequest;
+import club.boyuan.official.teammatching.dto.request.admin.ContentAuditRequest;
 import club.boyuan.official.teammatching.dto.response.admin.AuditListResponse;
 import club.boyuan.official.teammatching.dto.response.admin.AuditVerifyResponse;
-import club.boyuan.official.teammatching.entity.AuthMaterial;
-import club.boyuan.official.teammatching.entity.FileResource;
-import club.boyuan.official.teammatching.entity.User;
+import club.boyuan.official.teammatching.dto.response.admin.ContentAuditResponse;
+import club.boyuan.official.teammatching.dto.response.admin.ContentVerifyResponse;
+import club.boyuan.official.teammatching.entity.*;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.exception.ResourceNotFoundException;
-import club.boyuan.official.teammatching.mapper.AuthMaterialMapper;
-import club.boyuan.official.teammatching.mapper.FileResourceMapper;
-import club.boyuan.official.teammatching.mapper.UserMapper;
+import club.boyuan.official.teammatching.mapper.*;
 import club.boyuan.official.teammatching.service.AdminService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -37,6 +36,9 @@ public class AdminServiceImpl implements AdminService {
     private final UserMapper userMapper;
     private final AuthMaterialMapper authMaterialMapper;
     private final FileResourceMapper fileResourceMapper;
+    private final ProjectMapper projectMapper;
+    private final CommunityPostMapper communityPostMapper;
+    private final CommentMapper commentMapper;
 
     @Override
     public AuditListResponse getPendingAuthList(AuditRequest request) {
@@ -187,5 +189,259 @@ public class AdminServiceImpl implements AdminService {
 
         // 返回审核结果
         return new AuditVerifyResponse("审核完成", request.getResult());
+    }
+
+    @Override
+    public ContentAuditResponse getAuditContents(ContentAuditRequest request) {
+        String type = request.getType();
+        List<ContentAuditResponse.ContentItemDTO> contentItems;
+
+        if ("project".equalsIgnoreCase(type)) {
+            List<Project> projects = getPendingProjects();
+            contentItems = buildContentItems(
+                    projects,
+                    Project::getPublisherUserId,
+                    project -> buildProjectItem(project, "project")
+            );
+        } else if ("post".equalsIgnoreCase(type)) {
+            List<CommunityPost> posts = getPendingPosts();
+            contentItems = buildContentItems(
+                    posts,
+                    CommunityPost::getUserId,
+                    post -> buildPostItem(post, "post")
+            );
+        } else if ("comment".equalsIgnoreCase(type)) {
+            List<Comment> comments = getPendingComments();
+            contentItems = buildContentItems(
+                    comments,
+                    Comment::getUserId,
+                    comment -> buildCommentItem(comment, "comment")
+            );
+        } else {
+            contentItems = new ArrayList<>();
+        }
+
+        return new ContentAuditResponse(contentItems);
+    }
+
+    /**
+     * 查询待审核的项目
+     */
+    private List<Project> getPendingProjects() {
+        LambdaQueryWrapper<Project> query = new LambdaQueryWrapper<>();
+        query.eq(Project::getAuditStatus, 0)
+                .orderByDesc(Project::getReleaseTime);
+        return projectMapper.selectList(query);
+    }
+
+    /**
+     * 查询待审核的帖子
+     */
+    private List<CommunityPost> getPendingPosts() {
+        LambdaQueryWrapper<CommunityPost> query = new LambdaQueryWrapper<>();
+        query.eq(CommunityPost::getStatus, 0)
+                .orderByDesc(CommunityPost::getCreatedTime);
+        return communityPostMapper.selectList(query);
+    }
+
+    /**
+     * 查询待审核的评论
+     */
+    private List<Comment> getPendingComments() {
+        LambdaQueryWrapper<Comment> query = new LambdaQueryWrapper<>();
+        query.eq(Comment::getStatus, 0)
+                .orderByDesc(Comment::getCreatedTime);
+        return commentMapper.selectList(query);
+    }
+
+    /**
+     * 通用方法：构建内容审核项列表
+     * @param items 待审核的内容列表
+     * @param userIdExtractor 提取用户ID的函数
+     * @param itemBuilder 构建ContentItemDTO的函数
+     * @param <T> 内容类型
+     * @return 内容审核项列表
+     */
+    private <T> List<ContentAuditResponse.ContentItemDTO> buildContentItems(
+            List<T> items,
+            java.util.function.Function<T, Integer> userIdExtractor,
+            java.util.function.Function<T, ContentAuditResponse.ContentItemDTO> itemBuilder) {
+
+        if (items.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 批量查询用户信息
+        Map<Integer, User> userMap = batchQueryUsers(items, userIdExtractor);
+
+        // 组装数据
+        List<ContentAuditResponse.ContentItemDTO> contentItems = new ArrayList<>();
+        for (T item : items) {
+            ContentAuditResponse.ContentItemDTO contentItem = itemBuilder.apply(item);
+
+            // 设置发布者信息
+            Integer userId = userIdExtractor.apply(item);
+            User publisher = userMap.get(userId);
+            if (publisher != null) {
+                contentItem.setPublisher(buildPublisherDTO(publisher));
+            }
+
+            contentItems.add(contentItem);
+        }
+
+        return contentItems;
+    }
+
+    /**
+     * 批量查询用户信息
+     */
+    private <T> Map<Integer, User> batchQueryUsers(
+            List<T> items,
+            java.util.function.Function<T, Integer> userIdExtractor) {
+
+        List<Integer> userIds = items.stream()
+                .map(userIdExtractor)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (userIds.isEmpty()) {
+            return new java.util.HashMap<>();
+        }
+
+        LambdaQueryWrapper<User> userQuery = new LambdaQueryWrapper<>();
+        userQuery.in(User::getUserId, userIds);
+        List<User> users = userMapper.selectList(userQuery);
+
+        return users.stream()
+                .collect(Collectors.toMap(User::getUserId, u -> u));
+    }
+
+    /**
+     * 构建项目审核项
+     */
+    private ContentAuditResponse.ContentItemDTO buildProjectItem(Project project, String type) {
+        ContentAuditResponse.ContentItemDTO item = new ContentAuditResponse.ContentItemDTO();
+        item.setContentId(project.getProjectId());
+        item.setContentType(type);
+        item.setTitle(project.getName());
+        item.setContent(project.getProjectIntro());
+        item.setPublishTime(project.getReleaseTime());
+        item.setStatus(project.getAuditStatus());
+        return item;
+    }
+
+    /**
+     * 构建帖子审核项
+     */
+    private ContentAuditResponse.ContentItemDTO buildPostItem(CommunityPost post, String type) {
+        ContentAuditResponse.ContentItemDTO item = new ContentAuditResponse.ContentItemDTO();
+        item.setContentId(post.getPostId());
+        item.setContentType(type);
+        item.setTitle(post.getTitle());
+        item.setContent(post.getContent());
+        item.setPublishTime(post.getCreatedTime());
+        item.setStatus(post.getStatus());
+        return item;
+    }
+
+    /**
+     * 构建评论审核项
+     */
+    private ContentAuditResponse.ContentItemDTO buildCommentItem(Comment comment, String type) {
+        ContentAuditResponse.ContentItemDTO item = new ContentAuditResponse.ContentItemDTO();
+        item.setContentId(comment.getCommentId());
+        item.setContentType(type);
+        item.setTitle(null); // 评论没有标题
+        item.setContent(comment.getContent());
+        item.setPublishTime(comment.getCreatedTime());
+        item.setStatus(comment.getStatus());
+        return item;
+    }
+
+    /**
+     * 构建发布者DTO
+     */
+    private ContentAuditResponse.PublisherDTO buildPublisherDTO(User user) {
+        ContentAuditResponse.PublisherDTO publisherDTO = new ContentAuditResponse.PublisherDTO();
+        publisherDTO.setUserId(user.getUserId());
+        publisherDTO.setUsername(user.getUsername());
+        publisherDTO.setNickname(user.getNickname());
+        return publisherDTO;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ContentVerifyResponse verifyContent(String contentType, Integer contentId, AuditVerifyRequest request) {
+        // 获取当前管理员ID
+        Integer auditorUserId = UserContextUtil.getCurrentUserId();
+        if (auditorUserId == null) {
+            // TODO: 临时用于测试，生产环境需要移除
+            auditorUserId = 1; // 使用默认管理员ID进行测试
+        }
+
+        // 验证审核结果的有效性（1-通过 2-驳回）
+        if (request.getResult() == null || (request.getResult() != 1 && request.getResult() != 2)) {
+            throw new BusinessException("审核结果无效，必须为1（通过）或2（驳回）");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // 根据内容类型进行不同的处理
+        if ("project".equalsIgnoreCase(contentType)) {
+            // 审核项目
+            Project project = projectMapper.selectById(contentId);
+            if (project == null) {
+                throw new ResourceNotFoundException("项目不存在");
+            }
+
+            LambdaUpdateWrapper<Project> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(Project::getProjectId, contentId)
+                    .set(Project::getAuditStatus, request.getResult())
+                    .set(Project::getAuditTime, now)
+                    .set(Project::getAuditorUserId, auditorUserId)
+                    .set(Project::getRemark, request.getReason());
+            projectMapper.update(null, updateWrapper);
+
+        } else if ("post".equalsIgnoreCase(contentType)) {
+            // 审核帖子
+            CommunityPost post = communityPostMapper.selectById(contentId);
+            if (post == null) {
+                throw new ResourceNotFoundException("帖子不存在");
+            }
+
+            // 对于帖子，status 字段：1-正常 0-删除 2-违规下架
+            // 如果审核通过（result=1），设置 status=1（正常）
+            // 如果审核驳回（result=2），设置 status=2（违规下架）
+            Integer newStatus = request.getResult() == 1 ? 1 : 2;
+
+            LambdaUpdateWrapper<CommunityPost> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(CommunityPost::getPostId, contentId)
+                    .set(CommunityPost::getStatus, newStatus)
+                    .set(CommunityPost::getUpdateTime, now);
+            communityPostMapper.update(null, updateWrapper);
+
+        } else if ("comment".equalsIgnoreCase(contentType)) {
+            // 审核评论
+            Comment comment = commentMapper.selectById(contentId);
+            if (comment == null) {
+                throw new ResourceNotFoundException("评论不存在");
+            }
+
+            // 对于评论，status 字段：1-正常 0-删除
+            // 如果审核通过（result=1），设置 status=1（正常）
+            // 如果审核驳回（result=2），设置 status=0（删除）
+            Integer newStatus = request.getResult() == 1 ? 1 : 0;
+
+            LambdaUpdateWrapper<Comment> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(Comment::getCommentId, contentId)
+                    .set(Comment::getStatus, newStatus)
+                    .set(Comment::getUpdateTime, now);
+            commentMapper.update(null, updateWrapper);
+
+        } else {
+            throw new BusinessException("不支持的内容类型：" + contentType);
+        }
+
+        return new ContentVerifyResponse("审核完成");
     }
 }
