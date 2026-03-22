@@ -9,6 +9,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class EnumConverterConfig implements WebMvcConfigurer {
 
+
     @Override
     public void addFormatters(FormatterRegistry registry) {
         registry.addConverter(new StringToSectionTypeConverter());
