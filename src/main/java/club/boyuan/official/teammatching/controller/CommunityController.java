@@ -68,7 +68,7 @@ public class CommunityController {
     @PostMapping("/like")
     public CommonResponse<LikeResponse> Like(@Valid @RequestBody LikeRequest request) {
         Integer currentUserId = 1;
-//        Integer currentUserId = UserContextUtil.getCurrentUserId();
+//      Integer currentUserId = UserContextUtil.getCurrentUserId();
         LikeResponse response = communityService.toggleLikeStatus(request, currentUserId);
         return CommonResponse.ok(response);
     }
