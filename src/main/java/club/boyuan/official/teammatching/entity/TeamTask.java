@@ -1,19 +1,34 @@
-package club.boyuan.official.teammatching.dto.response.team;
+package club.boyuan.official.teammatching.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.Accessors;
 
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 任务响应DTO
+ * <p>
+ * 团队任务表
+ * </p>
  */
 @Data
-@ApiModel(value = "任务响应")
-public class TaskResponse {
-    @ApiModelProperty(value = "任务ID")
+@EqualsAndHashCode(callSuper = false)
+@Accessors(chain = true)
+@TableName("team_task")
+@ApiModel(value = "TeamTask对象", description = "团队任务表")
+public class TeamTask implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    @ApiModelProperty(value = "任务ID，主键")
+    @TableId(value = "task_id", type = IdType.AUTO)
     private Integer taskId;
 
     @ApiModelProperty(value = "项目ID")
@@ -28,9 +43,6 @@ public class TaskResponse {
     @ApiModelProperty(value = "负责人ID")
     private Integer assigneeId;
 
-    @ApiModelProperty(value = "负责人昵称")
-    private String assigneeNickname;
-
     @ApiModelProperty(value = "创建者ID")
     private Integer creatorId;
 
@@ -42,4 +54,7 @@ public class TaskResponse {
 
     @ApiModelProperty(value = "创建时间")
     private LocalDateTime createdTime;
+
+    @ApiModelProperty(value = "更新时间")
+    private LocalDateTime updateTime;
 }

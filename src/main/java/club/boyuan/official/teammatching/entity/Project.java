@@ -47,6 +47,9 @@ public class Project implements Serializable {
     @ApiModelProperty(value = "项目详细介绍")
     private String projectIntro;
 
+    @ApiModelProperty(value = "项目进展说明")
+    private String projectProgress;
+
     @ApiModelProperty(value = "项目特点/亮点")
     private String projectFeatures;
 
