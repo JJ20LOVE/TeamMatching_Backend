@@ -34,7 +34,7 @@ CREATE TABLE file_resource (
 
     -- 业务关联
                                user_id INT NOT NULL COMMENT '上传用户ID，关联user表',
-                               target_type TINYINT NOT NULL COMMENT '关联类型：1-用户简历 2-技能认证证书 3-帖子图片 4-评论图片 5-项目申请附件 6-人才卡片附件 7-用户头像 8-认证证明材料',
+                               target_type TINYINT NOT NULL COMMENT '关联类型：1-用户简历 2-技能认证证书 3-帖子图片 4-评论图片 5-项目申请附件 6-人才卡片附件 7-用户头像 8-认证证明材料 9-团队帖子附件',
                                target_id INT COMMENT '关联业务ID（如skill_cert_id, post_id等）',
 
     -- 状态控制
@@ -126,6 +126,7 @@ CREATE TABLE project (
                          level TINYINT COMMENT '级别：1-校级 2-省级 3-国家级',
                          project_type VARCHAR(64) COMMENT '类型：创新训练/创业实践',
                          project_intro TEXT COMMENT '项目详细介绍',
+                         project_progress TEXT COMMENT '项目进展说明',
                          project_features TEXT COMMENT '项目特点/亮点',
                          tags VARCHAR(255) COMMENT '项目标签（逗号分隔）',
                          allow_cross_major_application BOOLEAN DEFAULT TRUE COMMENT '是否允许跨专业申请',
@@ -239,7 +240,74 @@ CREATE TABLE team_member (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='团队成员表';
 
 -- =====================================================
--- 10. 创建人才卡片表（引用user, file_resource）
+-- 10. 创建团队帖子表（引用project, user）
+-- =====================================================
+DROP TABLE IF EXISTS team_post;
+CREATE TABLE team_post (
+                           post_id INT PRIMARY KEY AUTO_INCREMENT COMMENT '帖子ID，主键',
+                           project_id INT NOT NULL COMMENT '项目ID，关联project表',
+                           user_id INT NOT NULL COMMENT '发布者ID，关联user表',
+                           title VARCHAR(128) NOT NULL COMMENT '帖子标题',
+                           content TEXT NOT NULL COMMENT '帖子内容',
+                           status TINYINT DEFAULT 1 COMMENT '状态：1-正常 0-删除',
+
+                           created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
+                           update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+                           FOREIGN KEY (project_id) REFERENCES project(project_id),
+                           FOREIGN KEY (user_id) REFERENCES user(user_id),
+
+                           INDEX idx_project_created (project_id, created_time),
+                           INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='团队帖子表';
+
+-- =====================================================
+-- 11. 创建团队帖子附件关联表（引用team_post, file_resource）
+-- =====================================================
+DROP TABLE IF EXISTS team_post_attachment;
+CREATE TABLE team_post_attachment (
+                                      relation_id INT PRIMARY KEY AUTO_INCREMENT COMMENT '关联ID，主键',
+                                      post_id INT NOT NULL COMMENT '帖子ID，关联team_post表',
+                                      file_id BIGINT NOT NULL COMMENT '文件ID，关联file_resource表',
+                                      sort_order INT DEFAULT 0 COMMENT '附件排序',
+                                      created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+                                      FOREIGN KEY (post_id) REFERENCES team_post(post_id) ON DELETE CASCADE,
+                                      FOREIGN KEY (file_id) REFERENCES file_resource(file_id),
+
+                                      UNIQUE KEY unique_post_file (post_id, file_id),
+                                      INDEX idx_post_id (post_id),
+                                      INDEX idx_file_id (file_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='团队帖子附件关联表';
+
+-- =====================================================
+-- 12. 创建团队任务表（引用project, user）
+-- =====================================================
+DROP TABLE IF EXISTS team_task;
+CREATE TABLE team_task (
+                           task_id INT PRIMARY KEY AUTO_INCREMENT COMMENT '任务ID，主键',
+                           project_id INT NOT NULL COMMENT '项目ID，关联project表',
+                           title VARCHAR(128) NOT NULL COMMENT '任务标题',
+                           description TEXT COMMENT '任务描述',
+                           assignee_id INT NOT NULL COMMENT '负责人ID，关联user表',
+                           creator_id INT NOT NULL COMMENT '创建者ID，关联user表',
+                           deadline DATE COMMENT '截止日期',
+                           status TINYINT DEFAULT 0 COMMENT '状态：0-待办 1-进行中 2-已完成',
+
+                           created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                           update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+                           FOREIGN KEY (project_id) REFERENCES project(project_id),
+                           FOREIGN KEY (assignee_id) REFERENCES user(user_id),
+                           FOREIGN KEY (creator_id) REFERENCES user(user_id),
+
+                           INDEX idx_project_status (project_id, status),
+                           INDEX idx_assignee_id (assignee_id),
+                           INDEX idx_deadline (deadline)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='团队任务表';
+
+-- =====================================================
+-- 13. 创建人才卡片表（引用user, file_resource）
 -- =====================================================
 DROP TABLE IF EXISTS talent_card;
 CREATE TABLE talent_card (
@@ -289,7 +357,7 @@ CREATE TABLE talent_card (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人才卡片表';
 
 -- =====================================================
--- 11. 创建队长邀请记录表（引用user, project, talent_card）
+-- 14. 创建队长邀请记录表（引用user, project, talent_card）
 -- =====================================================
 DROP TABLE IF EXISTS talent_invitation;
 CREATE TABLE talent_invitation (
@@ -324,7 +392,7 @@ CREATE TABLE talent_invitation (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='队长邀请记录表';
 
 -- =====================================================
--- 12. 创建人才浏览记录表（引用user, talent_card）
+-- 15. 创建人才浏览记录表（引用user, talent_card）
 -- =====================================================
 DROP TABLE IF EXISTS talent_view_history;
 CREATE TABLE talent_view_history (
@@ -348,7 +416,7 @@ CREATE TABLE talent_view_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人才浏览记录表';
 
 -- =====================================================
--- 13. 创建用户-技能标签关联表（引用user, skill_tag）
+-- 16. 创建用户-技能标签关联表（引用user, skill_tag）
 -- =====================================================
 DROP TABLE IF EXISTS user_skill_relation;
 CREATE TABLE user_skill_relation (
@@ -367,7 +435,7 @@ CREATE TABLE user_skill_relation (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户-技能标签关联表';
 
 -- =====================================================
--- 14. 创建会话表（引用user, project）
+-- 17. 创建会话表（引用user, project）
 -- =====================================================
 DROP TABLE IF EXISTS chat_session;
 CREATE TABLE chat_session (
@@ -393,7 +461,7 @@ CREATE TABLE chat_session (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表';
 
 -- =====================================================
--- 15. 创建消息表（引用chat_session, user）
+-- 18. 创建消息表（引用chat_session, user）
 -- =====================================================
 DROP TABLE IF EXISTS message;
 CREATE TABLE message (
@@ -418,7 +486,7 @@ CREATE TABLE message (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';
 
 -- =====================================================
--- 16. 创建联系方式交换记录表（引用user, project）
+-- 19. 创建联系方式交换记录表（引用user, project）
 -- =====================================================
 DROP TABLE IF EXISTS contact_exchange;
 CREATE TABLE contact_exchange (
@@ -439,7 +507,7 @@ CREATE TABLE contact_exchange (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='联系方式交换记录表';
 
 -- =====================================================
--- 17. 创建社区帖子表（引用user）
+-- 20. 创建社区帖子表（引用user）
 -- =====================================================
 DROP TABLE IF EXISTS community_post;
 CREATE TABLE community_post (
@@ -470,7 +538,7 @@ CREATE TABLE community_post (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='社区帖子表';
 
 -- =====================================================
--- 18. 创建帖子图片关联表（引用community_post, file_resource）
+-- 21. 创建帖子图片关联表（引用community_post, file_resource）
 -- =====================================================
 DROP TABLE IF EXISTS post_image_relation;
 CREATE TABLE post_image_relation (
@@ -486,7 +554,7 @@ CREATE TABLE post_image_relation (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='帖子图片关联表';
 
 -- =====================================================
--- 19. 创建评论表（引用community_post, user, comment）
+-- 22. 创建评论表（引用community_post, user, comment）
 -- =====================================================
 DROP TABLE IF EXISTS comment;
 CREATE TABLE comment (
@@ -511,7 +579,7 @@ CREATE TABLE comment (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评论表';
 
 -- =====================================================
--- 20. 创建点赞表（引用user）
+-- 23. 创建点赞表（引用user）
 -- =====================================================
 DROP TABLE IF EXISTS like_record;
 CREATE TABLE like_record (
@@ -528,7 +596,7 @@ CREATE TABLE like_record (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='点赞表';
 
 -- =====================================================
--- 21. 创建收藏表（引用user）
+-- 24. 创建收藏表（引用user）
 -- =====================================================
 DROP TABLE IF EXISTS favorite;
 CREATE TABLE favorite (
@@ -545,7 +613,7 @@ CREATE TABLE favorite (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏表';
 
 -- =====================================================
--- 22. 创建关注表（引用user）
+-- 25. 创建关注表（引用user）
 -- =====================================================
 DROP TABLE IF EXISTS follow;
 CREATE TABLE follow (
