@@ -140,8 +140,7 @@ public class AdminServiceImpl implements AdminService {
         // 获取当前管理员ID
         Integer auditorUserId = UserContextUtil.getCurrentUserId();
         if (auditorUserId == null) {
-            // TODO: 临时用于测试，生产环境需要移除
-            auditorUserId = 1; // 使用默认管理员ID进行测试
+            throw new BusinessException("当前用户不存在");
         }
 
         // 查询用户是否存在
