@@ -34,4 +34,14 @@ public class RedisConstants {
      * JWT令牌有效期(小时)
      */
     public static final long JWT_TOKEN_EXPIRE_TIME = 2;
+
+    /**
+     * 临时文件延迟队列（ZSET：score=执行时间戳ms，member=fileId）
+     */
+    public static final String TEMP_FILE_DELAY_QUEUE_KEY = "temp_file:delay_queue";
+
+    /**
+     * 临时文件自动清理延迟（小时）
+     */
+    public static final long TEMP_FILE_DELETE_DELAY_HOURS = 24;
 }
