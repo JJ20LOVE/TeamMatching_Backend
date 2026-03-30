@@ -4,16 +4,24 @@ import club.boyuan.official.teammatching.dto.request.community.CommunityQueryReq
 import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreatePostRequest;
 import club.boyuan.official.teammatching.dto.request.community.LikeRequest;
+import club.boyuan.official.teammatching.dto.response.community.CommentDeleteVO;
+import club.boyuan.official.teammatching.dto.response.community.CommunityCommentItem;
+import club.boyuan.official.teammatching.dto.response.community.CommunityPostDetailItem;
 import club.boyuan.official.teammatching.dto.response.community.LikeResponse;
 import club.boyuan.official.teammatching.dto.response.community.PostListResponse;
 import club.boyuan.official.teammatching.entity.Comment;
 import club.boyuan.official.teammatching.entity.CommunityPost;
+import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.entity.LikeRecord;
+import club.boyuan.official.teammatching.entity.PostImageRelation;
 import club.boyuan.official.teammatching.entity.User;
 import club.boyuan.official.teammatching.exception.BusinessException;
+import club.boyuan.official.teammatching.exception.ResourceNotFoundException;
 import club.boyuan.official.teammatching.mapper.CommentMapper;
 import club.boyuan.official.teammatching.mapper.CommunityPostMapper;
+import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.mapper.LikeRecordMapper;
+import club.boyuan.official.teammatching.mapper.PostImageRelationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
 import club.boyuan.official.teammatching.service.CommunityService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -26,9 +34,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -40,22 +54,26 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
     private final UserMapper userMapper;
     private final CommentMapper commentMapper;
     private final LikeRecordMapper likeRecordMapper;
+    private final PostImageRelationMapper postImageRelationMapper;
+    private final FileResourceMapper fileResourceMapper;
 
     public CommunityServiceImpl(UserMapper userMapper,
                                 CommentMapper commentMapper,
-                                LikeRecordMapper likeRecordMapper) {
+                                LikeRecordMapper likeRecordMapper,
+                                PostImageRelationMapper postImageRelationMapper,
+                                FileResourceMapper fileResourceMapper) {
         this.userMapper = userMapper;
         this.commentMapper = commentMapper;
         this.likeRecordMapper = likeRecordMapper;
+        this.postImageRelationMapper = postImageRelationMapper;
+        this.fileResourceMapper = fileResourceMapper;
     }
     @Override
     public Number createNewPost(CreatePostRequest request, Integer userId) {
         // 1. 实例化实体类
         CommunityPost post = new CommunityPost();
 
-        // 2. 属性拷贝 (将 Request 中的 section, title, content, images 拷贝到 post)
-        // 关键：因为我们之前把 Entity 里的 images 改成了 List<String>，这里可以直接拷贝！
-        BeanUtils.copyProperties(request, post);
+        BeanUtils.copyProperties(request, post, "images");
 
         // 3. 填充后端控制的字段
         // postId由后端自动生成
@@ -69,10 +87,46 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
         post.setIsEssence(false); // isEssence
         post.setCreatedTime(LocalDateTime.now()); // createdTime
         post.setUpdateTime(LocalDateTime.now()); // updateTime
-        // 4. 调用 MyBatis-Plus 提供的 save 方法
-        // 这一步会触发 JacksonTypeHandler，自动把 List<String> 转为数据库里的 JSON 字符串
         this.save(post);
+        savePostImages(post.getPostId(), request.getImages());
         return post.getPostId();
+    }
+
+    private void savePostImages(Integer postId, List<String> images) {
+        if (images == null || images.isEmpty()) {
+            return;
+        }
+        int order = 0;
+        for (String raw : images) {
+            Long fileId = resolveImageToFileId(raw);
+            if (fileId == null) {
+                continue;
+            }
+            PostImageRelation rel = new PostImageRelation();
+            rel.setPostId(postId);
+            rel.setFileId(fileId);
+            rel.setSortOrder(order++);
+            rel.setCreatedTime(LocalDateTime.now());
+            try {
+                postImageRelationMapper.insert(rel);
+            } catch (Exception ignored) {
+                // 唯一约束 (post_id, file_id) 等冲突时跳过
+            }
+        }
+    }
+
+    private Long resolveImageToFileId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String s = raw.trim();
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            FileResource fr = fileResourceMapper.selectOne(
+                    new LambdaQueryWrapper<FileResource>().eq(FileResource::getFileUrl, s).last("LIMIT 1"));
+            return fr != null ? fr.getFileId() : null;
+        }
     }
 
     @Override
@@ -160,9 +214,13 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
         // 3. 处理可选参数 parentId (修复外键报错的关键)
         Integer parentId = request.getParentId();
         if (parentId != null && parentId > 0) {
-            // 进阶：如果传了 parentId，最好查一下父评论是否存在，防止非法 ID 攻击
             Comment parent = commentMapper.selectById(parentId);
-            if (parent == null) throw new BusinessException("回复的评论不存在");
+            if (parent == null || parent.getStatus() == null || parent.getStatus() != 1) {
+                throw new BusinessException("回复的评论不存在");
+            }
+            if (!Objects.equals(parent.getPostId(), post.getPostId())) {
+                throw new BusinessException("父评论不属于该帖子");
+            }
         } else {
             parentId = null; // 确保是一级评论
         }
@@ -256,6 +314,173 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
     }
 
     private record ToggleResult(boolean isLiked, int delta) {
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CommunityPostDetailItem getPostDetail(Long postId) {
+        if (postId == null || postId <= 0) {
+            throw new ResourceNotFoundException("帖子不存在");
+        }
+        CommunityPost post = this.getById(postId);
+        if (post == null || post.getStatus() == null || post.getStatus() != 1) {
+            throw new ResourceNotFoundException("帖子不存在");
+        }
+        int vc = post.getViewCount() == null ? 0 : post.getViewCount();
+        post.setViewCount(vc + 1);
+        post.setUpdateTime(LocalDateTime.now());
+        this.updateById(post);
+
+        CommunityPostDetailItem item = new CommunityPostDetailItem();
+        BeanUtils.copyProperties(post, item);
+        User author = userMapper.selectById(post.getUserId());
+        item.setUserInfo(getUserInfo(author));
+        item.setImages(loadPostImageUrls(post.getPostId()));
+        return item;
+    }
+
+    private List<String> loadPostImageUrls(Integer postId) {
+        LambdaQueryWrapper<PostImageRelation> w = new LambdaQueryWrapper<>();
+        w.eq(PostImageRelation::getPostId, postId).orderByAsc(PostImageRelation::getSortOrder);
+        List<PostImageRelation> rels = postImageRelationMapper.selectList(w);
+        if (rels.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Long> fileIds = rels.stream().map(PostImageRelation::getFileId).filter(Objects::nonNull).toList();
+        if (fileIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<FileResource> files = fileResourceMapper.selectBatchIds(fileIds);
+        Map<Long, FileResource> byId = files.stream().collect(Collectors.toMap(FileResource::getFileId, f -> f, (a, b) -> a));
+        List<String> urls = new ArrayList<>();
+        for (PostImageRelation rel : rels) {
+            FileResource fr = byId.get(rel.getFileId());
+            if (fr != null && fr.getFileUrl() != null && !fr.getFileUrl().isBlank()) {
+                urls.add(fr.getFileUrl());
+            }
+        }
+        return urls;
+    }
+
+    @Override
+    public List<CommunityCommentItem> getPostComments(Long postId, Integer page, Integer size) {
+        if (postId == null || postId <= 0) {
+            throw new ResourceNotFoundException("帖子不存在");
+        }
+        CommunityPost post = this.getById(postId);
+        if (post == null || post.getStatus() == null || post.getStatus() != 1) {
+            throw new ResourceNotFoundException("帖子不存在");
+        }
+        long p = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long sz = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (p < 1) {
+            p = 1;
+        }
+        if (sz < 1) {
+            sz = 10;
+        }
+
+        LambdaQueryWrapper<Comment> cw = new LambdaQueryWrapper<>();
+        cw.eq(Comment::getPostId, postId.intValue()).eq(Comment::getStatus, 1).orderByAsc(Comment::getCreatedTime);
+        List<Comment> all = commentMapper.selectList(cw);
+        Map<Integer, List<Comment>> byParent = new HashMap<>();
+        List<Comment> roots = new ArrayList<>();
+        for (Comment c : all) {
+            if (c.getParentId() == null) {
+                roots.add(c);
+            } else {
+                byParent.computeIfAbsent(c.getParentId(), k -> new ArrayList<>()).add(c);
+            }
+        }
+        roots.sort(Comparator.comparing(Comment::getCreatedTime, Comparator.nullsLast(Comparator.naturalOrder())));
+        int from = (int) ((p - 1) * sz);
+        if (from >= roots.size()) {
+            return new ArrayList<>();
+        }
+        int to = (int) Math.min(from + sz, roots.size());
+        List<Comment> pageRoots = roots.subList(from, to);
+
+        Set<Integer> userIds = new HashSet<>();
+        for (Comment r : pageRoots) {
+            collectSubtreeUserIds(r, byParent, userIds);
+        }
+        Map<Integer, User> userMap = loadUserMap(userIds);
+
+        List<CommunityCommentItem> out = new ArrayList<>();
+        for (Comment r : pageRoots) {
+            out.add(toCommentItem(r, byParent, userMap));
+        }
+        return out;
+    }
+
+    private static void collectSubtreeUserIds(Comment c, Map<Integer, List<Comment>> byParent, Set<Integer> out) {
+        out.add(c.getUserId());
+        for (Comment ch : byParent.getOrDefault(c.getCommentId(), Collections.emptyList())) {
+            collectSubtreeUserIds(ch, byParent, out);
+        }
+    }
+
+    private Map<Integer, User> loadUserMap(Set<Integer> userIds) {
+        if (userIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        List<User> users = userMapper.selectBatchIds(userIds);
+        return users.stream().collect(Collectors.toMap(User::getUserId, u -> u, (a, b) -> a));
+    }
+
+    private CommunityCommentItem toCommentItem(Comment c, Map<Integer, List<Comment>> byParent, Map<Integer, User> userMap) {
+        CommunityCommentItem item = new CommunityCommentItem();
+        item.setCommentId(c.getCommentId());
+        item.setContent(c.getContent());
+        item.setLikeCount(c.getLikeCount());
+        item.setStatus(c.getStatus());
+        item.setCreatedTime(c.getCreatedTime());
+        item.setUpdateTime(c.getUpdateTime());
+        item.setUserInfo(getUserInfo(userMap.get(c.getUserId())));
+
+        List<Comment> children = new ArrayList<>(byParent.getOrDefault(c.getCommentId(), Collections.emptyList()));
+        children.sort(Comparator.comparing(Comment::getCreatedTime, Comparator.nullsLast(Comparator.naturalOrder())));
+        for (Comment ch : children) {
+            item.getReplies().add(toCommentItem(ch, byParent, userMap));
+        }
+        return item;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CommentDeleteVO deleteComment(Long commentId, Integer operatorUserId) {
+        if (commentId == null || commentId <= 0) {
+            throw new ResourceNotFoundException("评论不存在");
+        }
+        Comment comment = commentMapper.selectById(commentId);
+        if (comment == null || comment.getStatus() == null || comment.getStatus() != 1) {
+            throw new ResourceNotFoundException("评论不存在");
+        }
+        CommunityPost post = this.getById(comment.getPostId().longValue());
+        if (post == null) {
+            throw new ResourceNotFoundException("帖子不存在");
+        }
+        User operator = userMapper.selectById(operatorUserId);
+        if (operator == null) {
+            throw new BusinessException("用户不存在");
+        }
+        boolean isAdmin = operator.getRole() != null && "admin".equalsIgnoreCase(operator.getRole().trim());
+        boolean isPostAuthor = Objects.equals(post.getUserId(), operatorUserId);
+        boolean isOwn = Objects.equals(comment.getUserId(), operatorUserId);
+        if (!isAdmin && !isPostAuthor && !isOwn) {
+            throw new BusinessException("无权限删除该评论");
+        }
+
+        comment.setStatus(0);
+        comment.setUpdateTime(LocalDateTime.now());
+        commentMapper.updateById(comment);
+
+        int cc = post.getCommentCount() == null ? 0 : post.getCommentCount();
+        post.setCommentCount(Math.max(0, cc - 1));
+        post.setUpdateTime(LocalDateTime.now());
+        this.updateById(post);
+
+        return new CommentDeleteVO(true, comment.getCommentId());
     }
 
     @NonNull

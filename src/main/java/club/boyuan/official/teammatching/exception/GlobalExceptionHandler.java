@@ -70,6 +70,18 @@ public class GlobalExceptionHandler {
 
     
     /**
+     * 资源不存在
+     */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleResourceNotFound(ResourceNotFoundException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 404);
+        response.put("message", ex.getMessage());
+        log.warn("资源不存在: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    /**
      * 处理业务异常
      */
     @ExceptionHandler(BusinessException.class)
