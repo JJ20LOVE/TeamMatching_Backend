@@ -103,6 +103,11 @@ public class FileServiceImpl implements FileService {
         
         // 7. 保存到数据库
         fileResourceMapper.insert(fileResource);
+
+        // 8. 如果是临时文件：投递 Redis 延迟队列，超时后自动清理（防止未关联遗留）
+        if (Boolean.TRUE.equals(fileResource.getIsTemp())) {
+            schedulePhysicalDelete(fileResource.getFileId());
+        }
         
         log.info("文件上传成功，fileId: {}, url: {}", fileResource.getFileId(), fileUrl);
         
@@ -163,9 +168,9 @@ public class FileServiceImpl implements FileService {
             }
         }
         
-        // 6. 如果是临时文件，可以设置定时任务清理记录
-        if (fileResource.getIsTemp()) {
-            schedulePhysicalDelete(fileId);
+        // 6. 如果是临时文件：用户主动删除时，取消待清理任务（避免队列里遗留无用成员）
+        if (Boolean.TRUE.equals(fileResource.getIsTemp())) {
+            redisTemplate.opsForZSet().remove(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileId.toString());
         }
         
         log.info("文件删除成功，fileId: {}", fileId);
@@ -299,10 +304,17 @@ public class FileServiceImpl implements FileService {
      * 调度物理删除任务
      */
     private void schedulePhysicalDelete(Long fileId) {
-        // TODO使用 Redis 延迟队列或定时任务清理临时文件
-        // 这里简单实现：设置 Redis 过期键，实际项目中应该使用定时任务
-        String key = "temp_file:" + fileId;  // 将 Long 转换为 String
-        redisTemplate.opsForValue().set(key, fileId.toString(), 24, TimeUnit.HOURS);
-        log.info("已安排临时文件物理删除，fileId: {}", fileId);
+        if (fileId == null || fileId <= 0) {
+            return;
+        }
+
+        long delayMillis = TimeUnit.HOURS.toMillis(RedisConstants.TEMP_FILE_DELETE_DELAY_HOURS);
+        long executeAt = System.currentTimeMillis() + delayMillis;
+
+        // ZSET 延迟队列：score=执行时间戳(ms)，member=fileId
+        // 同一个 fileId 重复投递会覆盖旧的执行时间
+        redisTemplate.opsForZSet().remove(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileId.toString());
+        redisTemplate.opsForZSet().add(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileId.toString(), (double) executeAt);
+        log.info("已投递临时文件延迟清理任务，fileId: {}, executeAt: {}", fileId, executeAt);
     }
 }

@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.team.CreateTaskRequest;
@@ -97,6 +98,7 @@ public class TeamController {
     @GetMapping("/{projectId}/posts")
     @ApiOperation(value = "获取团队讨论列表")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<TeamPostListResponse>> getTeamPosts(
             @ApiParam(value = "项目ID", required = true)
             @PathVariable Integer projectId,
