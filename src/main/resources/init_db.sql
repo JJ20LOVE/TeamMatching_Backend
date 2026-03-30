@@ -136,7 +136,7 @@ CREATE TABLE project (
                          contact_info TEXT COMMENT '匿名时显示的临时联系方式',
 
                          release_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
-                         deadline_recruit TIMESTAMP COMMENT '招募截止时间',
+                         deadline_recruit DATETIME NULL COMMENT '招募截止时间',
 
                          view_count INT DEFAULT 0 COMMENT '浏览次数',
                          favorite_count INT DEFAULT 0 COMMENT '收藏次数',
