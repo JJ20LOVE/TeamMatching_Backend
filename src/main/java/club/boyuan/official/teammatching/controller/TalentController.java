@@ -18,6 +18,7 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Validated
 @Api(tags = "人才广场")
+@Slf4j
 public class TalentController {
 
     private final TalentService talentService;
@@ -45,6 +47,7 @@ public class TalentController {
     public ResponseEntity<CommonResponse<TalentSaveResponse>> saveOrUpdateCard(
             @Valid @RequestBody CreateTalentCardRequest request) {
         Integer currentUserId = requireCurrentUserId();
+        log.info("创建/更新人才卡片, request: {}", request);
         TalentSaveResponse response = talentService.saveOrUpdateCard(currentUserId, request);
         return ResponseEntity.ok(CommonResponse.ok(response));
     }

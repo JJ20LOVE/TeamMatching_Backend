@@ -71,7 +71,7 @@ public class ProjectController {
             log.error("创建项目失败：userId={}, error={}", UserContextUtil.getCurrentUserId(), e.getMessage(), e);
             throw e;
         }
-    }
+    } 
     
     /**
      * 更新项目

@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/admin")
-//@Validated  // TODO: 验证参数有效性，生产环境需要开启
+@Validated
 @RequiredArgsConstructor
-//@NeedLogin  // TODO: 临时注释用于测试，生产环境需要取消注释
+@NeedLogin
 public class AdminController {
 
     private final AdminService adminService;

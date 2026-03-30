@@ -2,6 +2,9 @@ package club.boyuan.official.teammatching.service;
 
 import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
 import club.boyuan.official.teammatching.dto.request.community.LikeRequest;
+import club.boyuan.official.teammatching.dto.response.community.CommentDeleteVO;
+import club.boyuan.official.teammatching.dto.response.community.CommunityCommentItem;
+import club.boyuan.official.teammatching.dto.response.community.CommunityPostDetailItem;
 import club.boyuan.official.teammatching.dto.response.community.LikeResponse;
 import com.baomidou.mybatisplus.extension.service.IService;
 import club.boyuan.official.teammatching.entity.CommunityPost;
@@ -18,9 +21,16 @@ public interface CommunityService extends IService<CommunityPost> {
     // 社区服务接口方法
     Number createNewPost(CreatePostRequest request, Integer userId);
 
+    // 查询帖子列表
     List<PostListResponse.CommunityPostItem> queryPostList(CommunityQueryRequest request, Integer userId);
 
     Long createNewComment(Long postId, CreateCommentRequest request, Integer userId);
 
     LikeResponse toggleLikeStatus(LikeRequest request, Integer userId);
+
+    CommunityPostDetailItem getPostDetail(Long postId);
+
+    List<CommunityCommentItem> getPostComments(Long postId, Integer page, Integer size);
+
+    CommentDeleteVO deleteComment(Long commentId, Integer operatorUserId);
 }
