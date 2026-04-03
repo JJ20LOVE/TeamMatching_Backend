@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.talent.CreateTalentCardRequest;
@@ -44,6 +45,7 @@ public class TalentController {
     @PostMapping("/card")
     @NeedLogin
     @ApiOperation(value = "创建/更新人才卡片", notes = "创建或更新当前登录用户的人才卡片")
+    @NeedAuth
     public ResponseEntity<CommonResponse<TalentSaveResponse>> saveOrUpdateCard(
             @Valid @RequestBody CreateTalentCardRequest request) {
         Integer currentUserId = requireCurrentUserId();
@@ -54,6 +56,7 @@ public class TalentController {
 
     @GetMapping("/card/my")
     @NeedLogin
+    @NeedAuth
     @ApiOperation(value = "获取我的人才卡片", notes = "获取当前登录用户的人才卡片详情")
     public ResponseEntity<CommonResponse<TalentDetailResponse>> getMyCard() {
         Integer currentUserId = requireCurrentUserId();
@@ -83,6 +86,7 @@ public class TalentController {
 
     @PostMapping("/invite")
     @NeedLogin
+    @NeedAuth
     @ApiOperation(value = "发送邀请", notes = "项目发布者向人才卡发送组队邀请")
     public ResponseEntity<CommonResponse<TalentInvitationResponse>> sendInvitation(
             @Valid @RequestBody TalentInviteRequest request) {

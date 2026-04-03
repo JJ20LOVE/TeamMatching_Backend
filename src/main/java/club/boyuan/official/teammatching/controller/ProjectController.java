@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.project.ApplyProjectRequest;
@@ -46,6 +47,7 @@ public class ProjectController {
     @PostMapping
     @ApiOperation(value = "创建项目", notes = "创建新项目招募")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<Map<String, Object>>> createProject(
             @ApiParam(value = "创建项目请求参数", required = true)
             @Valid @RequestBody CreateProjectRequest request) {
@@ -79,6 +81,7 @@ public class ProjectController {
     @PutMapping("/{projectId}")
     @ApiOperation(value = "更新项目", notes = "更新项目信息")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<Map<String, String>>> updateProject(
             @ApiParam(value = "项目 ID", required = true)
             @PathVariable Integer projectId,
@@ -114,6 +117,7 @@ public class ProjectController {
     @GetMapping("/my-published")
     @ApiOperation(value = "获取我发布的项目列表", notes = "获取当前用户发布的所有项目")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<List<ProjectCardResponse>>> getMyPublishedProjects(
             @ApiParam(value = "按项目状态筛选")
             @RequestParam(value = "status", required = false) Integer status,
@@ -177,6 +181,7 @@ public class ProjectController {
     @PostMapping("/{projectId}/apply")
     @ApiOperation(value = "立即沟通（投递）", notes = "学生向项目投递申请")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<ApplyProjectResponse>> applyProject(
             @ApiParam(value = "项目 ID", required = true)
             @PathVariable Integer projectId,
@@ -206,6 +211,7 @@ public class ProjectController {
     @PatchMapping("/{projectId}/status")
     @ApiOperation(value = "更新项目状态", notes = "下架、关闭等状态更新")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<Map<String, String>>> updateProjectStatus(
             @ApiParam(value = "项目 ID", required = true)
             @PathVariable Integer projectId,
@@ -300,6 +306,7 @@ public class ProjectController {
      */
     @GetMapping("/{projectId}/similar")
     @ApiOperation(value = "获取相似项目", notes = "获取相似项目推荐")
+    @NeedLogin
     public ResponseEntity<CommonResponse<List<ProjectListResponse>>> getSimilarProjects(
             @ApiParam(value = "项目 ID", required = true)
             @PathVariable Integer projectId) {

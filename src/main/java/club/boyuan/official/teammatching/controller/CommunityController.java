@@ -1,5 +1,7 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
+import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.community.CommunityQueryRequest;
 import club.boyuan.official.teammatching.dto.request.community.CreateCommentRequest;
@@ -38,6 +40,8 @@ public class CommunityController {
 
     private final CommunityService communityService;
 
+    @NeedLogin
+    @NeedAuth
     @PostMapping("/post")
     public ResponseEntity<CommonResponse<PostDetailResponse.PostCreateVO>> createPost(
             @Valid @RequestBody CreatePostRequest request) {
@@ -56,6 +60,7 @@ public class CommunityController {
             throw e;
         }
     }
+
 
     @GetMapping("/post/{postId}")
     public ResponseEntity<CommonResponse<CommunityPostDetailItem>> getPostDetail(
@@ -85,6 +90,7 @@ public class CommunityController {
         }
     }
 
+    @NeedLogin
     @DeleteMapping("/comment/{commentId}")
     public ResponseEntity<CommonResponse<CommentDeleteVO>> deleteComment(
             @PathVariable @NotNull(message = "评论ID不能为空") @Min(1) Long commentId) {
@@ -118,6 +124,8 @@ public class CommunityController {
         }
     }
 
+    @NeedLogin
+    @NeedAuth
     @PostMapping("/post/{postId}/comment")
     public ResponseEntity<CommonResponse<CommentCreateVO>> createComment(
             @PathVariable @NotNull(message = "帖子ID不能为空") @Min(1) Long postId,
@@ -138,6 +146,7 @@ public class CommunityController {
         }
     }
 
+    @NeedLogin
     @PostMapping("/like")
     public ResponseEntity<CommonResponse<LikeResponse>> like(@Valid @RequestBody LikeRequest request) {
         log.info("收到点赞请求");
