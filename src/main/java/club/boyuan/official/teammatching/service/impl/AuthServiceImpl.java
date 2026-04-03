@@ -12,6 +12,7 @@ import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SubmitAuthRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
+import club.boyuan.official.teammatching.dto.request.auth.VerifyStudentEmailRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
 import club.boyuan.official.teammatching.dto.response.auth.AuthStatusResponse;
 import club.boyuan.official.teammatching.dto.response.auth.SubmitAuthResponse;
@@ -671,6 +672,53 @@ public class AuthServiceImpl implements AuthService {
         response.setAuthStatus(AuthStatusEnum.PENDING.getCode());
         
         log.info("身份认证提交成功，用户 ID: {}", userId);
+        return response;
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SubmitAuthResponse verifyByStudentEmail(VerifyStudentEmailRequest request, Integer userId) {
+        log.info("开始处理学生邮箱认证请求，用户 ID: {}, email: {}", userId, request.getEmail());
+
+        // 1. 校验验证码
+        validateVerifyCode(request.getEmail(), request.getVerifyCode());
+
+        // 2. 校验邮箱后缀（双重保险）
+        String email = request.getEmail();
+        if (email == null || !email.toLowerCase().endsWith(".edu.cn")) {
+            throw new BusinessException("必须使用以 .edu.cn 结尾的学生邮箱进行认证");
+        }
+
+        // 3. 查询用户信息
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        // 4. 更新用户邮箱、学校和认证状态
+        if (user.getEmail()==null)
+            user.setEmail(email);
+        user.setSchool(request.getSchool());
+        user.setAuthStatus(AuthStatusEnum.APPROVED.getCode());
+        user.setAuditTime(LocalDateTime.now());
+        user.setRemark("学生邮箱验证码自动通过");
+        user.setUpdateTime(LocalDateTime.now());
+
+        int updateResult = userMapper.updateById(user);
+        if (updateResult <= 0) {
+            throw new BusinessException("用户信息更新失败");
+        }
+
+        // 5. 清除验证码
+        clearVerifyCode(email);
+
+        // 6. 构造响应（复用 SubmitAuthResponse）
+        SubmitAuthResponse response = new SubmitAuthResponse();
+        response.setAuthId(user.getUserId());
+        response.setMessage("学生邮箱认证成功");
+        response.setAuthStatus(AuthStatusEnum.APPROVED.getCode());
+
+        log.info("学生邮箱认证成功，用户 ID: {}", userId);
         return response;
     }
     

@@ -11,6 +11,7 @@ import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SubmitAuthRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
+import club.boyuan.official.teammatching.dto.request.auth.VerifyStudentEmailRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
 import club.boyuan.official.teammatching.dto.response.auth.SendVerifyCodeResponse;
@@ -233,6 +234,36 @@ public class AuthController {
             return ResponseEntity.ok(CommonResponse.ok(response));
         } catch (Exception e) {
             log.error("身份认证提交失败：error={}", e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+    /**
+     * 学生邮箱认证接口
+     * @param request 学生邮箱认证请求参数
+     * @return 提交响应信息
+     */
+    @PostMapping("/verify-email")
+    @ApiOperation(value = "学生邮箱认证", notes = "通过学生邮箱验证码完成身份认证，仅支持 *.edu.cn 邮箱")
+    @NeedLogin
+    public ResponseEntity<CommonResponse<SubmitAuthResponse>> verifyByStudentEmail(
+            @ApiParam(value = "学生邮箱认证请求参数", required = true)
+            @Valid @RequestBody VerifyStudentEmailRequest request) {
+
+        log.info("收到学生邮箱认证请求");
+
+        try {
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+
+            SubmitAuthResponse response = authService.verifyByStudentEmail(request, userId);
+            log.info("学生邮箱认证成功：userId={}", userId);
+
+            return ResponseEntity.ok(CommonResponse.ok(response));
+        } catch (Exception e) {
+            log.error("学生邮箱认证失败：error={}", e.getMessage(), e);
             throw e;
         }
     }
