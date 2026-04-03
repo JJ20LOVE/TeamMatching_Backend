@@ -72,6 +72,7 @@ CREATE TABLE user (
                       avatar_file_id BIGINT COMMENT '头像文件ID，关联file_resource表',
                       gender TINYINT DEFAULT 0 COMMENT '性别：0-未知 1-男 2-女',
                       birthday DATE COMMENT '出生日期',
+                      school VARCHAR(128) COMMENT '学校名称',
                       major VARCHAR(64) COMMENT '专业',
                       grade VARCHAR(16) COMMENT '年级（如：2021级）',
                       tech_stack TEXT COMMENT '技术栈（如"Python,Java,机器学习"）',
