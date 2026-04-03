@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.contact.ContactExchangeRequest;
@@ -35,6 +36,7 @@ public class ContactController {
     @PostMapping("/contact/exchange/request")
     @ApiOperation(value = "请求交换联系方式", notes = "发起交换联系方式请求")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<ContactExchangeResponse>> requestExchange(
             @ApiParam(value = "请求参数", required = true)
             @Valid @RequestBody ContactExchangeRequest request) {
@@ -54,6 +56,7 @@ public class ContactController {
     @PostMapping("/contact/exchange/{exchangeId}/respond")
     @ApiOperation(value = "处理交换请求", notes = "同意或拒绝联系方式交换请求")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<Map<String, Object>>> respondExchange(
             @ApiParam(value = "交换记录ID", required = true)
             @PathVariable Integer exchangeId,
@@ -75,6 +78,7 @@ public class ContactController {
     @GetMapping("/contact/{userId}")
     @ApiOperation(value = "获取联系方式", notes = "交换成功后获取对方的联系方式")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<ContactInfoResponse>> getContactInfo(
             @ApiParam(value = "用户ID", required = true)
             @PathVariable("userId") Integer targetUserId) {

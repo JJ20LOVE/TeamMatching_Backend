@@ -81,6 +81,7 @@ public class FileController {
      * 获取技能标签列表
      * @return 技能标签列表
      */
+    @NeedLogin
     @GetMapping("/skill-tags")
     @ApiOperation(value = "获取技能标签列表", notes = "获取系统预设的技能标签列表")
     public ResponseEntity<CommonResponse<List<SkillTag>>> getSkillTags() {
@@ -103,6 +104,7 @@ public class FileController {
      * @param fileId 文件ID
      * @return 文件信息
      */
+    @NeedLogin
     @GetMapping("/file/{fileId}")
     @ApiOperation(value = "获取文件信息", notes = "根据文件ID获取文件详细信息")
     public ResponseEntity<CommonResponse<FileInfoResponse>> getFileInfo(
