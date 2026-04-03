@@ -27,7 +27,7 @@ public class TempFileCleanupTask {
     private final FileResourceMapper fileResourceMapper;
     private final OssUtil ossUtil;
 
-    @Scheduled(fixedDelayString = "${tempfile.cleanup.fixed-delay-ms:60000}")
+    @Scheduled(fixedDelayString = "${tempfile.cleanup.fixed-delay-ms:600000000}")
     public void consumeDueTempFiles() {
         long now = System.currentTimeMillis();
 
