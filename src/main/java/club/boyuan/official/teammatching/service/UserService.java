@@ -1,8 +1,11 @@
 package club.boyuan.official.teammatching.service;
 
 import club.boyuan.official.teammatching.dto.request.user.AddSkillCertRequest;
+import club.boyuan.official.teammatching.dto.request.user.UpdateNotificationSettingsRequest;
 import club.boyuan.official.teammatching.dto.request.user.UpdateProfileRequest;
 import club.boyuan.official.teammatching.dto.response.user.AddSkillCertResponse;
+import club.boyuan.official.teammatching.dto.response.user.NotificationSettingsResponse;
+import club.boyuan.official.teammatching.dto.response.user.NotificationSettingsSavedResponse;
 import club.boyuan.official.teammatching.dto.response.user.SkillCertInfoResponse;
 import club.boyuan.official.teammatching.dto.response.user.UserProfileResponse;
 
@@ -39,4 +42,19 @@ public interface UserService {
      * @return 技能认证列表
      */
     java.util.List<SkillCertInfoResponse> getSkillCertList(Integer userId);
+
+    /**
+     * 获取通知设置
+     * @param userId 用户 ID
+     * @return 通知开关
+     */
+    NotificationSettingsResponse getNotificationSettings(Integer userId);
+
+    /**
+     * 更新通知设置（部分字段可选）
+     * @param userId 用户 ID
+     * @param request 更新参数
+     * @return 保存结果
+     */
+    NotificationSettingsSavedResponse updateNotificationSettings(Integer userId, UpdateNotificationSettingsRequest request);
 }

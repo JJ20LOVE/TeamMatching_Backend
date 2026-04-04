@@ -23,6 +23,8 @@ import club.boyuan.official.teammatching.mapper.ProjectMapper;
 import club.boyuan.official.teammatching.mapper.TalentCardMapper;
 import club.boyuan.official.teammatching.mapper.TalentInvitationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
+import club.boyuan.official.teammatching.mq.producer.NotificationProducer;
+import club.boyuan.official.teammatching.mq.support.NotificationPreferenceUtils;
 import club.boyuan.official.teammatching.service.TalentService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -49,6 +51,7 @@ public class TalentServiceImpl implements TalentService {
 
     private final TalentCardMapper talentCardMapper;
     private final TalentInvitationMapper talentInvitationMapper;
+    private final NotificationProducer notificationProducer;
     private final UserMapper userMapper;
     private final ProjectMapper projectMapper;
     private final FileResourceMapper fileResourceMapper;
@@ -273,6 +276,18 @@ public class TalentServiceImpl implements TalentService {
         invitation.setReadStatus(false);
         invitation.setSendTime(now);
         talentInvitationMapper.insert(invitation);
+
+        User talentUser = userMapper.selectById(talentCard.getUserId());
+        if (talentUser != null && NotificationPreferenceUtils.isChannelEnabled(talentUser.getInvitationNotify())) {
+            User captain = userMapper.selectById(currentUserId);
+            String capName = captain != null && StringUtils.hasText(captain.getNickname()) ? captain.getNickname() : "队长";
+            notificationProducer.publishInvitation(
+                    talentCard.getUserId(),
+                    "组队邀请",
+                    capName + " 邀请你加入项目「" + project.getName() + "」",
+                    "talent_invitation",
+                    String.valueOf(invitation.getInvitationId()));
+        }
 
         LambdaUpdateWrapper<TalentCard> cardUpdate = new LambdaUpdateWrapper<TalentCard>()
                 .eq(TalentCard::getCardId, talentCard.getCardId())

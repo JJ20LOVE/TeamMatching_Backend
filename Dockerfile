@@ -5,7 +5,10 @@ WORKDIR /app
 COPY pom.xml /app/pom.xml
 COPY src /app/src
 
-RUN mvn -DskipTests package -q
+RUN mvn -DskipTests package -q \
+    && JAR="$(ls -1 /app/target/*.jar | grep -v 'original' | head -n 1)" \
+    && test -n "$JAR" \
+    && cp "$JAR" /app/app.jar
 
 # 把最终可运行 jar 统一命名为 app.jar（在 builder 里做）
 RUN set -eux; \

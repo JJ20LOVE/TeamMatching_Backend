@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  app:
+    image: ${DEPLOY_IMAGE:-teammatching:latest}
+    container_name: teammatching-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      # 应用配置
+      - SERVER_PORT=8080
+      - APP_ENVIRONMENT=${APP_ENVIRONMENT:-prod}
+      
+      # 数据库配置（必填）
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      
+      # Redis配置
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DATABASE=${REDIS_DATABASE:-0}
+      - REDIS_TIMEOUT=${REDIS_TIMEOUT:-2000ms}
+      
+      # 邮件配置
+      - MAIL_ENABLED=${MAIL_ENABLED:-false}
+      - MAIL_HOST=${MAIL_HOST:-smtp.qq.com}
+      - MAIL_PORT=${MAIL_PORT:-465}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      
+      # 阿里云OSS配置
+      - OSS_ENABLED=${OSS_ENABLED:-true}
+      - OSS_ENDPOINT=${OSS_ENDPOINT:-oss-cn-shanghai.aliyuncs.com}
+      - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID}
+      - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET}
+      - OSS_BUCKET_NAME=${OSS_BUCKET_NAME:-team-matching}
+      - OSS_CUSTOM_DOMAIN=${OSS_CUSTOM_DOMAIN:-}
+      - OSS_FILE_PREFIX=${OSS_FILE_PREFIX:-team-matching/}
+      
+      # 微信小程序配置
+      - WECHAT_MINIAPP_APPID=${WECHAT_MINIAPP_APPID:-}
+      - WECHAT_MINIAPP_SECRET=${WECHAT_MINIAPP_SECRET:-}
+      - WECHAT_MINIAPP_ENABLED=${WECHAT_MINIAPP_ENABLED:-false}
+      
+      # 短信配置
+      - SMS_ENABLED=${SMS_ENABLED:-false}
+      - SMS_PROVIDER=${SMS_PROVIDER:-aliyun}
+      - SMS_ACCESS_KEY_ID=${SMS_ACCESS_KEY_ID:-}
+      - SMS_ACCESS_KEY_SECRET=${SMS_ACCESS_KEY_SECRET:-}
+      - SMS_SIGN_NAME=${SMS_SIGN_NAME:-TeamMatch}
+      - SMS_TEMPLATE_CODE=${SMS_TEMPLATE_CODE:-}
+      
+      # JVM参数
+      - JAVA_OPTS=${JAVA_OPTS:--Xms512m -Xmx1024m -XX:+UseG1GC}
+    
+    volumes:
+      - app-logs:/app/logs
+    
+    networks:
+      - teammatching-network
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  mysql:
+    image: mysql:8.0
+    container_name: teammatching-mysql
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_EXTERNAL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-teammatching}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    command: 
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    networks:
+      - teammatching-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: teammatching-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_EXTERNAL_PORT:-6379}:6379"
+    command: >
+      sh -c '
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          redis-server --requirepass $$REDIS_PASSWORD --appendonly yes
+        else
+          redis-server --appendonly yes
+        fi
+      '
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    volumes:
+      - redis-data:/data
+    networks:
+      - teammatching-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+  app-logs:
+    driver: local
+
+networks:
+  teammatching-network:
+    driver: bridge

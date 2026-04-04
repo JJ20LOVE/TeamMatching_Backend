@@ -88,6 +88,11 @@ CREATE TABLE user (
                       is_talent_visible BOOLEAN DEFAULT FALSE COMMENT '人才卡片是否可见（快捷开关）',
                       talent_card_id INT COMMENT '当前使用的人才卡片ID',
 
+                      message_notify BOOLEAN DEFAULT TRUE COMMENT '新消息通知',
+                      project_update_notify BOOLEAN DEFAULT TRUE COMMENT '项目状态更新通知',
+                      invitation_notify BOOLEAN DEFAULT TRUE COMMENT '组队邀请通知',
+                      system_notify BOOLEAN DEFAULT TRUE COMMENT '系统通知',
+
                       status BOOLEAN DEFAULT FALSE COMMENT '是否冻结：TRUE-冻结 FALSE-正常',
                       last_login_time TIMESTAMP NULL COMMENT '最后登录时间',
                       login_count INT DEFAULT 0 COMMENT '登录次数',

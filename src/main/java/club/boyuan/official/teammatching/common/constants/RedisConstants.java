@@ -44,4 +44,9 @@ public class RedisConstants {
      * 临时文件自动清理延迟（小时）
      */
     public static final long TEMP_FILE_DELETE_DELAY_HOURS = 24;
+
+    /**
+     * 通知异步队列（Redis List，JSON 字符串元素；生产者 {@code RPUSH}，消费者建议 {@code BLPOP}）
+     */
+    public static final String NOTIFICATION_QUEUE_KEY = "queue:notification";
 }

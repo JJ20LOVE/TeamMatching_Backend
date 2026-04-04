@@ -3,9 +3,12 @@ package club.boyuan.official.teammatching.controller;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.user.AddSkillCertRequest;
+import club.boyuan.official.teammatching.dto.request.user.UpdateNotificationSettingsRequest;
 import club.boyuan.official.teammatching.dto.request.user.UpdateProfileRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.user.AddSkillCertResponse;
+import club.boyuan.official.teammatching.dto.response.user.NotificationSettingsResponse;
+import club.boyuan.official.teammatching.dto.response.user.NotificationSettingsSavedResponse;
 import club.boyuan.official.teammatching.dto.response.user.SkillCertInfoResponse;
 import club.boyuan.official.teammatching.dto.response.user.UserProfileResponse;
 import club.boyuan.official.teammatching.exception.BusinessException;
@@ -154,6 +157,50 @@ public class UserController {
             return ResponseEntity.ok(CommonResponse.ok(responseList));
         } catch (Exception e) {
             log.error("技能认证列表获取失败，userId={}, error={}", UserContextUtil.getCurrentUserId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * 获取通知设置
+     */
+    @GetMapping("/notification/settings")
+    @ApiOperation(value = "获取通知设置", notes = "获取当前用户的通知开关（对应 UI「新消息通知」）")
+    @NeedLogin
+    public ResponseEntity<CommonResponse<NotificationSettingsResponse>> getNotificationSettings() {
+        log.info("收到获取通知设置请求");
+        try {
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+            NotificationSettingsResponse response = userService.getNotificationSettings(userId);
+            return ResponseEntity.ok(CommonResponse.ok(response));
+        } catch (Exception e) {
+            log.error("获取通知设置失败，userId={}, error={}", UserContextUtil.getCurrentUserId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * 更新通知设置
+     */
+    @PutMapping("/notification/settings")
+    @ApiOperation(value = "更新通知设置", notes = "更新当前用户的通知开关，可只传需要修改的字段")
+    @NeedLogin
+    public ResponseEntity<CommonResponse<NotificationSettingsSavedResponse>> updateNotificationSettings(
+            @ApiParam(value = "通知设置", required = true)
+            @Valid @RequestBody UpdateNotificationSettingsRequest request) {
+        log.info("收到更新通知设置请求");
+        try {
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+            NotificationSettingsSavedResponse response = userService.updateNotificationSettings(userId, request);
+            return ResponseEntity.ok(CommonResponse.ok(response));
+        } catch (Exception e) {
+            log.error("更新通知设置失败，userId={}, error={}", UserContextUtil.getCurrentUserId(), e.getMessage(), e);
             throw e;
         }
     }

@@ -9,6 +9,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 /**
  * WebSocket / STOMP 配置：
  * <p>后端通过 /topic 前缀广播消息，前端只需订阅对应的 topic 即可实时收到聊天消息。</p>
+ * <p>通知：订阅 {@code /topic/notify/{当前用户ID}} 接收异步通知与通知设置同步（请勿订阅他人 ID）。</p>
  */
 @Configuration
 @EnableWebSocketMessageBroker
