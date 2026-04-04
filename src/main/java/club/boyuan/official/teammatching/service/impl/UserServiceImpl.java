@@ -2,8 +2,11 @@ package club.boyuan.official.teammatching.service.impl;
 
 import club.boyuan.official.teammatching.common.utils.SecurityUtils;
 import club.boyuan.official.teammatching.dto.request.user.AddSkillCertRequest;
+import club.boyuan.official.teammatching.dto.request.user.UpdateNotificationSettingsRequest;
 import club.boyuan.official.teammatching.dto.request.user.UpdateProfileRequest;
 import club.boyuan.official.teammatching.dto.response.user.AddSkillCertResponse;
+import club.boyuan.official.teammatching.dto.response.user.NotificationSettingsResponse;
+import club.boyuan.official.teammatching.dto.response.user.NotificationSettingsSavedResponse;
 import club.boyuan.official.teammatching.dto.response.user.SkillCertInfoResponse;
 import club.boyuan.official.teammatching.dto.response.user.UserProfileResponse;
 import club.boyuan.official.teammatching.entity.FileResource;
@@ -13,12 +16,15 @@ import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.mapper.SkillCertificationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
+import club.boyuan.official.teammatching.mq.dto.NotificationPushDto;
+import club.boyuan.official.teammatching.mq.support.NotificationPreferenceUtils;
 import club.boyuan.official.teammatching.service.UserService;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +45,9 @@ public class UserServiceImpl implements UserService {
     
     @Autowired
     private FileResourceMapper fileResourceMapper;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
     
     @Override
     public UserProfileResponse getUserProfile(Integer userId) {
@@ -220,5 +229,61 @@ public class UserServiceImpl implements UserService {
         
         log.info("技能认证列表获取成功，userId: {}, count: {}", userId, responseList.size());
         return responseList;
+    }
+
+    @Override
+    public NotificationSettingsResponse getNotificationSettings(Integer userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        NotificationSettingsResponse response = new NotificationSettingsResponse();
+        response.setMessageNotify(NotificationPreferenceUtils.isChannelEnabled(user.getMessageNotify()));
+        response.setProjectUpdateNotify(NotificationPreferenceUtils.isChannelEnabled(user.getProjectUpdateNotify()));
+        response.setInvitationNotify(NotificationPreferenceUtils.isChannelEnabled(user.getInvitationNotify()));
+        response.setSystemNotify(NotificationPreferenceUtils.isChannelEnabled(user.getSystemNotify()));
+        return response;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public NotificationSettingsSavedResponse updateNotificationSettings(Integer userId, UpdateNotificationSettingsRequest request) {
+        if (request.getMessageNotify() == null && request.getProjectUpdateNotify() == null
+                && request.getInvitationNotify() == null && request.getSystemNotify() == null) {
+            throw new BusinessException("请至少提供一项通知设置");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        boolean updated = new LambdaUpdateChainWrapper<>(userMapper)
+                .eq(User::getUserId, userId)
+                .set(request.getMessageNotify() != null, User::getMessageNotify, request.getMessageNotify())
+                .set(request.getProjectUpdateNotify() != null, User::getProjectUpdateNotify, request.getProjectUpdateNotify())
+                .set(request.getInvitationNotify() != null, User::getInvitationNotify, request.getInvitationNotify())
+                .set(request.getSystemNotify() != null, User::getSystemNotify, request.getSystemNotify())
+                .set(true, User::getUpdateTime, LocalDateTime.now())
+                .update();
+        if (!updated) {
+            throw new BusinessException("更新通知设置失败");
+        }
+        NotificationSettingsSavedResponse response = new NotificationSettingsSavedResponse();
+        response.setMessage("设置已保存");
+
+        pushSettingsSync(userId);
+        return response;
+    }
+
+    private void pushSettingsSync(Integer userId) {
+        try {
+            NotificationSettingsResponse snapshot = getNotificationSettings(userId);
+            NotificationPushDto push = new NotificationPushDto();
+            push.setPushType("SETTINGS_SYNC");
+            push.setCreateTimeMillis(System.currentTimeMillis());
+            push.setSettings(snapshot);
+            messagingTemplate.convertAndSend("/topic/notify/" + userId, push);
+        } catch (Exception e) {
+            log.warn("通知设置 WebSocket 同步失败 userId={}", userId, e);
+        }
     }
 }

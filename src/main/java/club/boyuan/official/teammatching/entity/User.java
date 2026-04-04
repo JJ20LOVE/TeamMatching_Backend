@@ -108,6 +108,18 @@ public class User implements Serializable {
     @ApiModelProperty(value = "当前使用的人才卡片ID")
     private Integer talentCardId;
 
+    @ApiModelProperty(value = "新消息通知")
+    private Boolean messageNotify;
+
+    @ApiModelProperty(value = "项目状态更新通知")
+    private Boolean projectUpdateNotify;
+
+    @ApiModelProperty(value = "组队邀请通知")
+    private Boolean invitationNotify;
+
+    @ApiModelProperty(value = "系统通知")
+    private Boolean systemNotify;
+
     @ApiModelProperty(value = "是否冻结：TRUE-冻结 FALSE-正常")
     private Boolean status;
 

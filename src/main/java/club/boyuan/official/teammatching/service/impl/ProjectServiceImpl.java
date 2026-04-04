@@ -28,6 +28,8 @@ import club.boyuan.official.teammatching.mapper.FavoriteMapper;
 import club.boyuan.official.teammatching.mapper.FollowMapper;
 import club.boyuan.official.teammatching.mapper.SkillTagMapper;
 import club.boyuan.official.teammatching.mapper.UserSkillRelationMapper;
+import club.boyuan.official.teammatching.mq.producer.NotificationProducer;
+import club.boyuan.official.teammatching.mq.support.NotificationPreferenceUtils;
 import club.boyuan.official.teammatching.service.ProjectService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -36,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -62,6 +65,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final FollowMapper followMapper;
     private final UserSkillRelationMapper userSkillRelationMapper;
     private final SkillTagMapper skillTagMapper;
+    private final NotificationProducer notificationProducer;
     
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -279,7 +283,7 @@ public class ProjectServiceImpl implements ProjectService {
                                                             Integer size) {
         log.info("获取我发布的项目列表，userId: {}, status: {}, auditStatus: {}, page: {}, size: {}",
                 userId, status, auditStatus, page, size);
-
+        
         LambdaQueryWrapper<Project> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Project::getPublisherUserId, userId);
 
@@ -435,6 +439,19 @@ public class ProjectServiceImpl implements ProjectService {
 
         log.info("申请加入项目成功，applicationId: {}, sessionId: {}",
                 application.getApplicationId(), session.getSessionId());
+
+        User publisher = userMapper.selectById(publisherUserId);
+        if (publisher != null && NotificationPreferenceUtils.isChannelEnabled(publisher.getProjectUpdateNotify())) {
+            User applicant = userMapper.selectById(userId);
+            String applicantName = applicant != null && StringUtils.hasText(applicant.getNickname())
+                    ? applicant.getNickname() : "有人";
+            notificationProducer.publishProjectUpdate(
+                    publisherUserId,
+                    "新的项目申请",
+                    applicantName + " 申请加入「" + project.getName() + "」",
+                    "team_application",
+                    String.valueOf(application.getApplicationId()));
+        }
 
         ApplyProjectResponse response = new ApplyProjectResponse();
         response.setApplicationId(application.getApplicationId());

@@ -15,6 +15,8 @@ import club.boyuan.official.teammatching.mapper.ChatSessionMapper;
 import club.boyuan.official.teammatching.mapper.MessageMapper;
 import club.boyuan.official.teammatching.mapper.ProjectMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
+import club.boyuan.official.teammatching.mq.producer.NotificationProducer;
+import club.boyuan.official.teammatching.mq.support.NotificationPreferenceUtils;
 import club.boyuan.official.teammatching.service.MessageService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -43,17 +45,20 @@ public class MessageServiceImpl implements MessageService {
     private final ProjectMapper projectMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final CacheManager userCacheManager;
+    private final NotificationProducer notificationProducer;
 
     public MessageServiceImpl(ChatSessionMapper chatSessionMapper, MessageMapper messageMapper,
                               UserMapper userMapper, ProjectMapper projectMapper,
                               SimpMessagingTemplate messagingTemplate,
-                              @Qualifier("userCacheManager") CacheManager userCacheManager) {
+                              @Qualifier("userCacheManager") CacheManager userCacheManager,
+                              NotificationProducer notificationProducer) {
         this.chatSessionMapper = chatSessionMapper;
         this.messageMapper = messageMapper;
         this.userMapper = userMapper;
         this.projectMapper = projectMapper;
         this.messagingTemplate = messagingTemplate;
         this.userCacheManager = userCacheManager;
+        this.notificationProducer = notificationProducer;
     }
 
     @Override
@@ -198,6 +203,19 @@ public class MessageServiceImpl implements MessageService {
         // 前端只需订阅该 topic 即可实时收到消息，而无需轮询 HTTP 接口
         messagingTemplate.convertAndSend("/topic/chat/" + session.getSessionId(), push);
 
+        User receiver = userMapper.selectById(receiverId);
+        if (receiver != null && NotificationPreferenceUtils.isChannelEnabled(receiver.getMessageNotify())) {
+            User senderUser = getSenderForPush(senderId);
+            String nickname = senderUser == null || senderUser.getNickname() == null ? "对方" : senderUser.getNickname();
+            String preview = abbreviate(request.getContent(), 120);
+            notificationProducer.publishMessage(
+                    receiverId,
+                    "新消息",
+                    nickname + "：" + preview,
+                    "chat_message",
+                    String.valueOf(session.getSessionId()));
+        }
+
         SendMessageResponse resp = new SendMessageResponse();
         resp.setMessageId(message.getMessageId());
         resp.setSendTime(now);
@@ -330,5 +348,15 @@ public class MessageServiceImpl implements MessageService {
 
     private static int nullToZero(Integer v) {
         return v == null ? 0 : v;
+    }
+
+    private static String abbreviate(String text, int maxLen) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= maxLen) {
+            return text;
+        }
+        return text.substring(0, maxLen) + "...";
     }
 }
