@@ -117,6 +117,7 @@ public class TeamController {
     @PostMapping("/{projectId}/task")
     @ApiOperation(value = "创建任务")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<TaskResponse>> createTask(
             @ApiParam(value = "项目ID", required = true)
             @PathVariable Integer projectId,
@@ -133,6 +134,7 @@ public class TeamController {
     @PatchMapping("/task/{taskId}")
     @ApiOperation(value = "更新任务状态")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<TaskResponse>> updateTaskStatus(
             @ApiParam(value = "任务ID", required = true)
             @PathVariable Integer taskId,
@@ -149,6 +151,7 @@ public class TeamController {
     @DeleteMapping("/{projectId}/member/{userId}")
     @ApiOperation(value = "移除成员")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<Map<String, String>>> removeMember(
             @ApiParam(value = "项目ID", required = true)
             @PathVariable Integer projectId,

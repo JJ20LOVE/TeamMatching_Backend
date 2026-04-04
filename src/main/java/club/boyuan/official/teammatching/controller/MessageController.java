@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.request.chat.SendMessageRequest;
@@ -39,6 +40,7 @@ public class MessageController {
     @GetMapping("/sessions")
     @ApiOperation(value = "获取会话列表", notes = "获取当前用户的所有会话")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<List<ChatSessionResponse>>> getChatSessions(
             @ApiParam(value = "页码")
             @RequestParam(value = "page", required = false) Integer page,
@@ -59,6 +61,7 @@ public class MessageController {
     @PostMapping("/message")
     @ApiOperation(value = "发送消息", notes = "在会话中发送消息")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<SendMessageResponse>> sendMessage(
             @ApiParam(value = "发送消息请求参数", required = true)
             @Valid @RequestBody SendMessageRequest request) {
@@ -78,6 +81,7 @@ public class MessageController {
     @GetMapping("/messages")
     @ApiOperation(value = "获取消息历史", notes = "获取会话的历史消息")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<List<ChatMessageResponse>>> getChatMessages(
             @ApiParam(value = "会话ID", required = true)
             @RequestParam("sessionId") Integer sessionId,
@@ -102,6 +106,7 @@ public class MessageController {
     @PatchMapping("/session/{sessionId}/status")
     @ApiOperation(value = "更新沟通状态", notes = "更新招募沟通状态")
     @NeedLogin
+    @NeedAuth
     public ResponseEntity<CommonResponse<Map<String, String>>> updateRecruitStatus(
             @ApiParam(value = "会话ID", required = true)
             @PathVariable Integer sessionId,
