@@ -10,7 +10,7 @@ services:
       - SERVER_PORT=8080
       - APP_ENVIRONMENT=${APP_ENVIRONMENT:-prod}
       
-      # 数据库配置（必填）
+      # 数据库（必填）：DB_URL 主机须为 mysql（服务名），不要用 localhost
       - DB_URL=${DB_URL}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -81,9 +81,10 @@ services:
       - "${MYSQL_EXTERNAL_PORT:-3306}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-teammatching}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-team_matching}
+      # 显式置空：镜像 entrypoint 仅在非空 MYSQL_USER 时建用户；勿再用 DB_USERNAME 映射为 MYSQL_USER（root 会报错）
+      MYSQL_USER: ""
+      MYSQL_PASSWORD: ""
     volumes:
       - mysql-data:/var/lib/mysql
       - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
