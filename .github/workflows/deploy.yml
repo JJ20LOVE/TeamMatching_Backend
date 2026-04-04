@@ -115,6 +115,10 @@ jobs:
             set -e
             
             echo "📦 开始部署 TeamMatching..."
+            if [ ! -d /opt/teammatching ]; then
+              echo "❌ 目录 /opt/teammatching 不存在，请在服务器创建并放入 docker-compose.prod.yml、.env、init_db.sql"
+              exit 1
+            fi
             cd /opt/teammatching
             
             echo "⬇️  拉取最新Docker镜像..."
@@ -126,27 +130,43 @@ jobs:
             echo "🚀 启动新容器..."
             docker compose -f docker-compose.prod.yml --env-file .env up -d
             
-            echo "⏳ 等待服务启动..."
-            sleep 15
+            echo "⏳ 等待数据库与依赖就绪..."
+            sleep 20
             
             echo "✅ 检查容器状态..."
-            docker compose -f docker-compose.prod.yml --env-file .env ps
+            docker compose -f docker-compose.prod.yml --env-file .env ps -a
             
-            echo "🔍 检查应用健康状态..."
+            # 若有容器退出，先打日志便于排查（常见：MySQL init_db.sql 路径错误、.env 中 DB 配置错误）
+            if [ -z "$(docker compose -f docker-compose.prod.yml --env-file .env ps -q app 2>/dev/null)" ]; then
+              echo "❌ app 服务未在运行（或尚未启动），最近日志："
+              docker compose -f docker-compose.prod.yml --env-file .env logs --tail=80 mysql || true
+              docker compose -f docker-compose.prod.yml --env-file .env logs --tail=80 redis || true
+              docker compose -f docker-compose.prod.yml --env-file .env logs --tail=80 app || true
+              exit 1
+            fi
+            
+            # 宿主机映射端口可能与 8080 不同（.env 里 APP_PORT），用 compose 解析
+            HOST_PORT="$(docker compose -f docker-compose.prod.yml --env-file .env port app 8080 2>/dev/null | awk -F: '{print $NF}' || true)"
+            if [ -z "$HOST_PORT" ]; then HOST_PORT=8080; fi
+            echo "🔍 健康检查使用宿主机端口: ${HOST_PORT}（容器内仍为 8080）"
+            
+            echo "🔍 检查应用健康状态（最多约 3 分钟）..."
             ok=0
-            for i in {1..10}; do
-              if curl -fsS http://localhost:8080/actuator/health > /dev/null 2>&1; then
+            for i in $(seq 1 36); do
+              if curl -fsS "http://127.0.0.1:${HOST_PORT}/actuator/health" > /dev/null 2>&1; then
                 echo "✅ 应用健康检查通过！"
                 ok=1
                 break
               fi
-              echo "⏳ 等待应用启动... ($i/10)"
+              echo "⏳ 等待应用启动... ($i/36)，探测 http://127.0.0.1:${HOST_PORT}/actuator/health"
               sleep 5
             done
             echo "📋 最近的应用日志："
-            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=40 app
+            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=60 app || true
             if [ "$ok" != "1" ]; then
-              echo "❌ 健康检查超时"
+              echo "❌ 健康检查超时。请 SSH 上服务器执行："
+              echo "   cd /opt/teammatching && docker compose -f docker-compose.prod.yml --env-file .env logs app"
+              echo "   curl -v http://127.0.0.1:${HOST_PORT}/actuator/health"
               exit 1
             fi
             echo "🧹 清理旧Docker镜像..."
