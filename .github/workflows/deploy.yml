@@ -2,7 +2,7 @@ name: TeamMatching CI/CD
 
 on:
   push:
-    branches: [ "main" ] # 当你把代码推送到 main 分支时启动
+    branches: [ "github_workflow_update" ] # 当你把代码推送到 main 分支时启动
 
 jobs:
   build-and-deploy:
