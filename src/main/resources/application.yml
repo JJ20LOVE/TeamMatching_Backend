@@ -1,6 +1,18 @@
 server:
   port: ${SERVER_PORT:8080}
 
+# 健康检查（CI 部署脚本与运维探活使用 /actuator/health）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+
 spring:
   application:
     name: team-matching
