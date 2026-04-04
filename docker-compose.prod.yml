@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   app:
-    image: ${DEPLOY_IMAGE:-teammatching:latest}
+    image: "${DEPLOY_IMAGE}"
     container_name: teammatching-app
     restart: unless-stopped
     ports:
@@ -96,11 +94,12 @@ services:
     networks:
       - teammatching-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
+      # 127.0.0.1：避免 localhost→::1 而 mysqld 未监听 IPv6 时 ping 失败（常见于 Linux 容器）
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 12
+      start_period: 120s
 
   redis:
     image: redis:7-alpine

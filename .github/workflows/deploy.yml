@@ -128,7 +128,11 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env down || true
             
             echo "🚀 启动新容器..."
-            docker compose -f docker-compose.prod.yml --env-file .env up -d
+            docker compose -f docker-compose.prod.yml --env-file .env up -d || {
+              echo "❌ compose up 失败（常见：MySQL 未通过健康检查或 init_db 报错），MySQL 最近日志："
+              docker compose -f docker-compose.prod.yml --env-file .env logs --tail=120 mysql || true
+              exit 1
+            }
             
             echo "⏳ 等待数据库与依赖就绪..."
             sleep 20
