@@ -21,10 +21,10 @@ public class SendVerifyCodeRequest {
              message = "请输入正确的邮箱或手机号格式")
     private String target;
     
-    @ApiModelProperty(value = "类型：register-注册 login-登录 reset-重置密码", 
+    @ApiModelProperty(value = "类型：register-注册 login-登录 reset-重置密码 auth-学生邮箱认证", 
                      example = "register", required = true)
     @NotBlank(message = "类型不能为空")
-    @Pattern(regexp = "^(register|login|reset)$", 
-             message = "类型只能是 register/login/reset")
+    @Pattern(regexp = "^(register|login|reset|auth)$", 
+             message = "类型只能是 register/login/reset/auth")
     private String type;
 }

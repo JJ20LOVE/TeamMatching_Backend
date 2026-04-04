@@ -7,6 +7,7 @@ import club.boyuan.official.teammatching.dto.request.auth.RegisterRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SendVerifyCodeRequest;
 import club.boyuan.official.teammatching.dto.request.auth.SubmitAuthRequest;
 import club.boyuan.official.teammatching.dto.request.auth.WxLoginRequest;
+import club.boyuan.official.teammatching.dto.request.auth.VerifyStudentEmailRequest;
 import club.boyuan.official.teammatching.dto.response.auth.RegisterResponse;
 import club.boyuan.official.teammatching.dto.response.auth.AuthStatusResponse;
 import club.boyuan.official.teammatching.dto.response.auth.SubmitAuthResponse;
@@ -72,6 +73,14 @@ public interface AuthService {
      * @return 提交响应信息
      */
     SubmitAuthResponse submitAuth(SubmitAuthRequest submitAuthRequest, Integer userId);
+    
+    /**
+     * 通过学生邮箱验证码完成身份认证
+     * @param request 学生邮箱认证请求参数
+     * @param userId 用户 ID
+     * @return 提交响应信息
+     */
+    SubmitAuthResponse verifyByStudentEmail(VerifyStudentEmailRequest request, Integer userId);
     
     /**
      * 查询认证状态

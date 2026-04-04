@@ -1,5 +1,7 @@
 package club.boyuan.official.teammatching.controller;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAuth;
+import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.dto.request.chat.SendMessageRequest;
 import club.boyuan.official.teammatching.dto.request.chat.StompSendMessageRequest;
 import club.boyuan.official.teammatching.service.MessageService;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Controller;
  */
 @Controller
 @RequiredArgsConstructor
+@NeedAuth
+@NeedLogin
 public class StompChatController {
 
     private final MessageService messageService;

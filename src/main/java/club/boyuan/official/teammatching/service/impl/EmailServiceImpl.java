@@ -5,6 +5,7 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -55,6 +56,7 @@ public class EmailServiceImpl implements EmailService {
     }
     
     @Override
+    @Async("emailTaskExecutor")
     public void sendHtmlVerifyCode(String toEmail, String verifyCode, String subject) {
         if (!mailEnabled) {
             log.warn("邮件服务未启用，验证码: {} (仅用于测试)", verifyCode);
@@ -74,7 +76,7 @@ public class EmailServiceImpl implements EmailService {
             log.info("HTML验证码邮件发送成功: {}", toEmail);
         } catch (MessagingException e) {
             log.error("发送HTML验证码邮件失败: {}, 错误: {}", toEmail, e.getMessage(), e);
-            throw new RuntimeException("发送HTML验证码邮件失败");
+            // 异步发送：不影响验证码接口返回
         }
     }
     

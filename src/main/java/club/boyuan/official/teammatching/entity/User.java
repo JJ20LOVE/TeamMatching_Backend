@@ -69,6 +69,9 @@ public class User implements Serializable {
     @ApiModelProperty(value = "出生日期")
     private LocalDate birthday;
 
+    @ApiModelProperty(value = "学校名称")
+    private String school;
+
     @ApiModelProperty(value = "专业")
     private String major;
 
