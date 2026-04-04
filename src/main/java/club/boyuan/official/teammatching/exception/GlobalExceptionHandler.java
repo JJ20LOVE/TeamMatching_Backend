@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -78,6 +79,18 @@ public class GlobalExceptionHandler {
         response.put("code", 404);
         response.put("message", ex.getMessage());
         log.warn("资源不存在: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    /**
+     * 静态资源不存在（如前端误请求 flutter_service_worker.js）
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 404);
+        response.put("message", "资源不存在");
+        log.warn("静态资源不存在: {}", ex.getResourcePath());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 

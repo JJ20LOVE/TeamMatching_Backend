@@ -94,6 +94,11 @@ logging:
   level:
     club.boyuan.official.teammatch.mapper: debug
 
+tempfile:
+  cleanup:
+    enabled: ${TEMPFILE_CLEANUP_ENABLED:true}
+    fixed-delay-ms: ${TEMPFILE_CLEANUP_FIXED_DELAY_MS:600000000}
+
 # SpringDoc OpenAPI 配置
 springdoc:
   api-docs:

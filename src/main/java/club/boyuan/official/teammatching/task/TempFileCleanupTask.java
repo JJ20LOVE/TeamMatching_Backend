@@ -6,6 +6,8 @@ import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,7 @@ import java.util.Set;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "tempfile.cleanup", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class TempFileCleanupTask {
 
     private static final int BATCH_SIZE = 50;
@@ -31,12 +34,18 @@ public class TempFileCleanupTask {
     public void consumeDueTempFiles() {
         long now = System.currentTimeMillis();
 
-        // 按执行时间（score）拉取到期任务
-        Set<Object> dueFileIds = redisTemplate.opsForZSet().rangeByScore(
-                RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY,
-                Double.NEGATIVE_INFINITY,
-                (double) now
-        );
+        Set<Object> dueFileIds;
+        try {
+            // 按执行时间（score）拉取到期任务
+            dueFileIds = redisTemplate.opsForZSet().rangeByScore(
+                    RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY,
+                    Double.NEGATIVE_INFINITY,
+                    (double) now
+            );
+        } catch (RedisConnectionFailureException e) {
+            log.warn("临时文件清理跳过：Redis 不可用，cause={}", e.getMessage());
+            return;
+        }
 
         if (dueFileIds == null || dueFileIds.isEmpty()) {
             return;
@@ -56,12 +65,22 @@ public class TempFileCleanupTask {
                 fileId = Long.valueOf(fileIdStr);
             } catch (NumberFormatException e) {
                 // member 异常：直接移除避免死循环
-                redisTemplate.opsForZSet().remove(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileIdStr);
+                try {
+                    redisTemplate.opsForZSet().remove(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileIdStr);
+                } catch (RedisConnectionFailureException ex) {
+                    log.warn("临时文件清理中断：Redis 不可用，cause={}", ex.getMessage());
+                    return;
+                }
                 continue;
             }
 
             // 先移除队列成员，避免同一轮重复消费
-            redisTemplate.opsForZSet().remove(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileIdStr);
+            try {
+                redisTemplate.opsForZSet().remove(RedisConstants.TEMP_FILE_DELAY_QUEUE_KEY, fileIdStr);
+            } catch (RedisConnectionFailureException e) {
+                log.warn("临时文件清理中断：Redis 不可用，cause={}", e.getMessage());
+                return;
+            }
 
             FileResource fileResource = fileResourceMapper.selectById(fileId);
             if (fileResource == null) {
