@@ -28,15 +28,27 @@ import club.boyuan.official.teammatching.service.AuthService;
 import club.boyuan.official.teammatching.service.EmailService;
 import club.boyuan.official.teammatching.service.SmsService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 
@@ -64,9 +76,18 @@ public class AuthServiceImpl implements AuthService {
     
     @Autowired
     private SmsService smsService;
+
+    @Value("${wechat.miniapp.appid}")
+    private String appid;
+
+    @Value("${wechat.miniapp.secret}")
+    private String secret;
     
     @Value("${app.environment:test}")
     private String environment;
+
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -389,43 +410,38 @@ public class AuthServiceImpl implements AuthService {
      * 调用微信接口获取session_key和openid
      */
     private WxSessionResult getSessionKey(String code) {
-        // TODO: 这里需要配置微信小程序的appid和secret
-        // 暂时返回模拟数据用于开发测试
-        WxSessionResult result = new WxSessionResult();
-        result.setOpenid("mock_openid_" + code);
-        result.setSessionKey("mock_session_key_" + code);
-        return result;
-        
-        /*
-        // 实际生产环境应该这样实现：
-        String appId = "your_wechat_appid";
-        String secret = "your_wechat_secret";
+        /**
+         * 已配置微信小程序认证信息，支持从 application.yml 动态读取
+         */
         String url = String.format(
-            "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
-            appId, secret, code
+                "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+                appid, secret, code
         );
-        
-        try {
-            RestTemplate restTemplate = new RestTemplate();
+        try{
             String response = restTemplate.getForObject(url, String.class);
-            // 解析JSON响应
+
             ObjectMapper mapper = new ObjectMapper();
             JsonNode jsonNode = mapper.readTree(response);
-            
-            if (jsonNode.has("errcode")) {
-                throw new BusinessException("WX_LOGIN_ERROR", "微信登录失败: " + jsonNode.get("errmsg").asText());
+
+            if (jsonNode.has("errcode") && jsonNode.get("errcode").asInt() != 0) {
+                int errCode = jsonNode.get("errcode").asInt();
+                String errMsg = jsonNode.get("errmsg").asText();
+                log.error("微信登录业务失败: [{}]{}", errCode, errMsg);
+                throw new BusinessException("WX_LOGIN_ERROR", "微信验证失败: " + errMsg);
             }
-            
+
             WxSessionResult result = new WxSessionResult();
-            result.setOpenid(jsonNode.get("openid").asText());
-            result.setSessionKey(jsonNode.get("session_key").asText());
+            result.setOpenid(jsonNode.path("openid").asText());
+            result.setSessionKey(jsonNode.path("session_key").asText());
             return result;
-            
+        } catch (JsonProcessingException e) {
+            log.error("微信响应JSON解析异常", e);
+            throw new BusinessException("DATA_PARSE_ERROR", "解析微信数据失败");
         } catch (Exception e) {
-            log.error("调用微信接口失败: {}", e.getMessage(), e);
-            throw new BusinessException("WX_API_ERROR", "调用微信接口失败");
+            log.error("微信接口调用发生网络或系统异常", e);
+            throw new BusinessException("SYSTEM_ERROR", "无法连接至微信服务器");
         }
-        */
+
     }
     
     /**
@@ -434,11 +450,36 @@ public class AuthServiceImpl implements AuthService {
     private WxUserInfo decryptUserInfo(String encryptedData, String iv, String sessionKey) {
         // TODO: 实现微信数据解密逻辑
         // 这需要使用AES解密算法
-        WxUserInfo userInfo = new WxUserInfo();
-        userInfo.setNickName("微信用户");
-        userInfo.setAvatarUrl("");
-        userInfo.setGender(0);
-        return userInfo;
+        try {
+            // 1. 微信的数据都是 Base64 编码的，先解码成字节数组
+            byte[] dataByte = Base64.getDecoder().decode(encryptedData);
+            byte[] keyByte = Base64.getDecoder().decode(sessionKey);
+            byte[] ivByte = Base64.getDecoder().decode(iv);
+
+            // 2. 初始化加密器
+            // 算法/模式/补码方式：AES/CBC/PKCS5Padding (Java默认支持5，效果等同于微信要求的7)
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            SecretKeySpec spec = new SecretKeySpec(keyByte, "AES");
+            IvParameterSpec ivSpec = new IvParameterSpec(ivByte);
+
+            cipher.init(Cipher.DECRYPT_MODE, spec, ivSpec);
+
+            // 3. 执行解密操作
+            byte[] resultByte = cipher.doFinal(dataByte);
+            if (null != resultByte && resultByte.length > 0) {
+                String result = new String(resultByte, StandardCharsets.UTF_8);
+
+                // 4. 使用 Jackson 将 JSON 字符串转为 Java 对象
+                ObjectMapper mapper = new ObjectMapper();
+                WxUserInfo userInfo = mapper.readValue(result, WxUserInfo.class);
+                log.info("解密对象成功：昵称={}, 头像={}", userInfo.getNickName(), userInfo.getAvatarUrl());
+                return userInfo;
+            }
+        } catch (Exception e) {
+            log.error("微信数据解密失败: {}", e.getMessage());
+            throw new BusinessException("DECRYPT_ERROR", "用户信息解析失败");
+        }
+        return null;
     }
     
     /**
@@ -811,11 +852,12 @@ public class AuthServiceImpl implements AuthService {
         private String openid;
         private String sessionKey;
     }
-    
+
     /**
      * 微信用户信息类
      */
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private static class WxUserInfo {
         private String nickName;
         private String avatarUrl;
