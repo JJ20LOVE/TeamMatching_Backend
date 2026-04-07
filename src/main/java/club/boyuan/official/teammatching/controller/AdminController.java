@@ -4,7 +4,7 @@ import club.boyuan.official.teammatching.dto.request.admin.AuditRequest;
 import club.boyuan.official.teammatching.dto.request.admin.AuditVerifyRequest;
 import club.boyuan.official.teammatching.dto.request.admin.ContentAuditRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
-import club.boyuan.official.teammatching.common.annotation.NeedLogin;
+import club.boyuan.official.teammatching.common.annotation.NeedAdmin;
 import club.boyuan.official.teammatching.dto.response.admin.AuditListResponse;
 import club.boyuan.official.teammatching.dto.response.admin.AuditVerifyResponse;
 import club.boyuan.official.teammatching.dto.response.admin.ContentAuditResponse;
@@ -23,14 +23,14 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 管理员相关控制器
- * 所有接口都需要 JWT 认证（Authorization: Bearer <token>）
+ * 需要 JWT，且当前用户 {@code role=admin}
  */
 @Slf4j
 @RestController
 @RequestMapping("/admin")
 @Validated
 @RequiredArgsConstructor
-@NeedLogin
+@NeedAdmin
 @Api(tags = "管理员接口")
 public class AdminController {
 

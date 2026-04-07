@@ -39,4 +39,7 @@ public class AuthConstants {
      * 刷新令牌阈值(小时) - 当剩余时间小于这个值时需要刷新
      */
     public static final long REFRESH_THRESHOLD = 1;
+
+    /** 管理员角色，与 user 表 role 字段一致 */
+    public static final String ROLE_ADMIN = "admin";
 }
