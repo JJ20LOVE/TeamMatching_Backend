@@ -1,5 +1,6 @@
 package club.boyuan.official.teammatching.interceptor;
 
+import club.boyuan.official.teammatching.common.annotation.NeedAdmin;
 import club.boyuan.official.teammatching.common.annotation.NeedAuth;
 import club.boyuan.official.teammatching.common.annotation.NeedLogin;
 import club.boyuan.official.teammatching.common.constants.AuthConstants;
@@ -50,9 +51,13 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         // 检查是否需要认证
         boolean needAuth = handlerMethod.hasMethodAnnotation(NeedAuth.class) 
                          || handlerMethod.getBeanType().isAnnotationPresent(NeedAuth.class);
+
+        // 检查是否需要管理员权限
+        boolean needAdmin = handlerMethod.hasMethodAnnotation(NeedAdmin.class)
+                           || handlerMethod.getBeanType().isAnnotationPresent(NeedAdmin.class);
         
         // 如果不需要认证，直接通过
-        if (!needLogin && !needAuth) {
+        if (!needLogin && !needAuth && !needAdmin) {
             return true;
         }
         
@@ -104,12 +109,16 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
                 }
             }
         }
+
+        if (needAdmin && !isAdmin(user)) {
+            throw new ForbiddenException("需要管理员权限");
+        }
         
         // 设置用户上下文
         UserContextUtil.setCurrentUser(user);
         
-        log.debug("用户认证成功: userId={}, nickname={}, needAuth={}", 
-                 userId, user.getNickname(), needAuth);
+        log.debug("用户认证成功: userId={}, nickname={}, needAuth={}, needAdmin={}", 
+                 userId, user.getNickname(), needAuth, needAdmin);
         
         return true;
     }
@@ -142,5 +151,10 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         }
         
         return null;
+    }
+
+    private static boolean isAdmin(User user) {
+        String role = user.getRole();
+        return role != null && AuthConstants.ROLE_ADMIN.equalsIgnoreCase(role.trim());
     }
 }
