@@ -27,7 +27,7 @@ spring:
   
   # 邮件配置
   mail:
-    enabled: ${MAIL_ENABLED:false}
+    enabled: ${MAIL_ENABLED:true}
     host: ${MAIL_HOST:smtp.qq.com}
     port: ${MAIL_PORT:465}
     username: ${MAIL_USERNAME:}

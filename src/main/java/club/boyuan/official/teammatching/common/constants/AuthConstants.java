@@ -33,7 +33,7 @@ public class AuthConstants {
     /**
      * JWT令牌有效期(小时)
      */
-    public static final long JWT_TOKEN_EXPIRE_TIME = 2;
+    public static final long JWT_TOKEN_EXPIRE_TIME = 24;
     
     /**
      * 刷新令牌阈值(小时) - 当剩余时间小于这个值时需要刷新

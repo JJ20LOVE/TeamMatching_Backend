@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -657,6 +658,9 @@ public class AuthServiceImpl implements AuthService {
         user.setMajor(submitAuthRequest.getMajor());
         user.setGrade(submitAuthRequest.getGrade());
         user.setEmail(submitAuthRequest.getEmail());
+        if (StringUtils.hasText(submitAuthRequest.getSchool())) {
+            user.setSchool(submitAuthRequest.getSchool().trim());
+        }
         user.setAuthStatus(AuthStatusEnum.PENDING.getCode());
         user.setUpdateTime(LocalDateTime.now());
         
