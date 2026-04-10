@@ -149,6 +149,33 @@ public class ProjectController {
             throw e;
         }
     }
+
+    /**
+     * 根据用户ID获取其发布的项目列表
+     */
+    @GetMapping("/user/{userId}/published")
+    @ApiOperation(value = "根据用户ID获取其发布的项目列表", notes = "公开接口：按发布人 userId 查询项目卡片列表（可按 status/auditStatus 分页筛选）")
+    public ResponseEntity<CommonResponse<List<ProjectCardResponse>>> getUserPublishedProjects(
+            @ApiParam(value = "用户ID（发布人）", required = true)
+            @PathVariable Integer userId,
+            @ApiParam(value = "按项目状态筛选（0-草拟 1-实施 2-招募中 3-完成 4-终止）")
+            @RequestParam(value = "status", required = false) Integer status,
+            @ApiParam(value = "按审核状态筛选（0-待审核 1-通过 2-驳回）")
+            @RequestParam(value = "auditStatus", required = false) Integer auditStatus,
+            @ApiParam(value = "页码")
+            @RequestParam(value = "page", required = false) Integer page,
+            @ApiParam(value = "每页数量")
+            @RequestParam(value = "size", required = false) Integer size) {
+        log.info("收到按 userId 获取发布项目列表请求：userId={}", userId);
+        try {
+            List<ProjectCardResponse> projects = projectService.getPublishedProjectsByUserId(
+                    userId, status, auditStatus, page, size);
+            return ResponseEntity.ok(CommonResponse.ok(projects));
+        } catch (Exception e) {
+            log.error("按 userId 获取发布项目列表失败：userId={}, error={}", userId, e.getMessage(), e);
+            throw e;
+        }
+    }
     
     /**
      * 获取项目详情

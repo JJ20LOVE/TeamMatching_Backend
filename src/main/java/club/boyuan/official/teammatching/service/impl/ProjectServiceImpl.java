@@ -351,6 +351,16 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public List<ProjectCardResponse> getPublishedProjectsByUserId(Integer userId,
+                                                                  Integer status,
+                                                                  Integer auditStatus,
+                                                                  Integer page,
+                                                                  Integer size) {
+        // 当前逻辑与“我发布的项目”一致，只是 userId 来自 path 参数且不要求必须是当前登录用户。
+        return getMyPublishedProjects(userId, status, auditStatus, page, size);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     @CacheEvict(cacheNames = "projectMatch", allEntries = true)
     public ApplyProjectResponse applyProject(Integer projectId, Integer userId, ApplyProjectRequest request) {

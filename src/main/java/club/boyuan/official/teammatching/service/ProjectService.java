@@ -58,6 +58,21 @@ public interface ProjectService {
                                                      Integer size);
 
     /**
+     * 根据用户ID获取其发布的项目列表（公开接口）
+     * @param userId      用户 ID
+     * @param status      按项目状态筛选（可选）
+     * @param auditStatus 按审核状态筛选（可选）
+     * @param page        页码（可选）
+     * @param size        每页数量（可选）
+     * @return 项目卡片列表
+     */
+    List<ProjectCardResponse> getPublishedProjectsByUserId(Integer userId,
+                                                           Integer status,
+                                                           Integer auditStatus,
+                                                           Integer page,
+                                                           Integer size);
+
+    /**
      * 学生向项目投递申请（立即沟通）
      * @param projectId 项目 ID
      * @param userId    当前登录用户 ID
