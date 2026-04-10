@@ -34,6 +34,9 @@ public class CreateProjectRequest {
     @NotBlank(message = "项目介绍不能为空")
     @ApiModelProperty(value = "项目详细介绍", required = true, example = "本项目旨在利用人工智能技术，为大学生提供一个高效、精准的比赛组队平台")
     private String projectIntro;
+
+    @ApiModelProperty(value = "项目进展说明")
+    private String projectProgress;
     
     @ApiModelProperty(value = "项目特点/亮点", example = "智能匹配、实时沟通、团队协作")
     private String projectFeatures;

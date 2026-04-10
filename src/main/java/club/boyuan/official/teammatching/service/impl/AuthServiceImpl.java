@@ -39,6 +39,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
@@ -698,6 +699,9 @@ public class AuthServiceImpl implements AuthService {
         user.setMajor(submitAuthRequest.getMajor());
         user.setGrade(submitAuthRequest.getGrade());
         user.setEmail(submitAuthRequest.getEmail());
+        if (StringUtils.hasText(submitAuthRequest.getSchool())) {
+            user.setSchool(submitAuthRequest.getSchool().trim());
+        }
         user.setAuthStatus(AuthStatusEnum.PENDING.getCode());
         user.setUpdateTime(LocalDateTime.now());
         

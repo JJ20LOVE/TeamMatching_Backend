@@ -19,6 +19,9 @@ public class SubmitAuthRequest {
     @ApiModelProperty(value = "学号", required = true, example = "20210001")
     @NotBlank(message = "学号不能为空")
     private String studentId;
+
+    @ApiModelProperty(value = "学校名称（可选；若前端有填写则会同步到用户信息）", required = false, example = "华东师范大学")
+    private String school;
     
     @ApiModelProperty(value = "真实姓名", required = true, example = "张三")
     @NotBlank(message = "真实姓名不能为空")

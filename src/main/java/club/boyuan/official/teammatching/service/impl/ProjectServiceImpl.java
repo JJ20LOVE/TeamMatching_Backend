@@ -80,6 +80,7 @@ public class ProjectServiceImpl implements ProjectService {
         project.setLevel(request.getLevel());
         project.setProjectType(request.getProjectType());
         project.setProjectIntro(request.getProjectIntro());
+        project.setProjectProgress(request.getProjectProgress());
         project.setProjectFeatures(request.getProjectFeatures());
         project.setTags(request.getTags());
         project.setAllowCrossMajorApplication(request.getAllowCrossMajor());
@@ -92,7 +93,7 @@ public class ProjectServiceImpl implements ProjectService {
         project.setViewCount(0);
         project.setFavoriteCount(0);
         project.setApplyCount(0);
-        project.setAuditStatus(0); // 待审核
+        project.setAuditStatus(1); // TODO: 后续完善审核逻辑
         
         projectMapper.insert(project);
         
@@ -347,6 +348,16 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         return result;
+    }
+
+    @Override
+    public List<ProjectCardResponse> getPublishedProjectsByUserId(Integer userId,
+                                                                  Integer status,
+                                                                  Integer auditStatus,
+                                                                  Integer page,
+                                                                  Integer size) {
+        // 当前逻辑与“我发布的项目”一致，只是 userId 来自 path 参数且不要求必须是当前登录用户。
+        return getMyPublishedProjects(userId, status, auditStatus, page, size);
     }
 
     @Override
