@@ -9,6 +9,7 @@ import club.boyuan.official.teammatching.dto.request.project.UpdateProjectReques
 import club.boyuan.official.teammatching.dto.response.project.ProjectCardResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectDetailResponse;
 import club.boyuan.official.teammatching.dto.response.project.ApplyProjectResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyApplicationItemResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectListResponse;
 import club.boyuan.official.teammatching.entity.ChatSession;
 import club.boyuan.official.teammatching.entity.Favorite;
@@ -482,6 +483,91 @@ public class ProjectServiceImpl implements ProjectService {
         response.setMessage("投递成功，等待队长回复");
         response.setSessionId(session.getSessionId());
         return response;
+    }
+
+    @Override
+    public List<MyApplicationItemResponse> listMyApplications(Integer userId, Integer page, Integer size) {
+        long current = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long pageSize = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (current < 1) {
+            current = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+
+        LambdaQueryWrapper<TeamApplication> appWrapper = new LambdaQueryWrapper<>();
+        appWrapper.eq(TeamApplication::getApplicantUserId, userId)
+                .orderByDesc(TeamApplication::getApplyTime);
+
+        Page<TeamApplication> appPage = new Page<>(current, pageSize);
+        Page<TeamApplication> paged = teamApplicationMapper.selectPage(appPage, appWrapper);
+        List<TeamApplication> applications = paged.getRecords();
+        if (applications == null || applications.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Integer> projectIds = applications.stream()
+                .map(TeamApplication::getProjectId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Integer, Project> projectMap = new HashMap<>();
+        if (!projectIds.isEmpty()) {
+            for (Project p : projectMapper.selectBatchIds(projectIds)) {
+                if (p != null) {
+                    projectMap.put(p.getProjectId(), p);
+                }
+            }
+        }
+
+        List<ChatSession> sessions = Collections.emptyList();
+        if (!projectIds.isEmpty()) {
+            LambdaQueryWrapper<ChatSession> sessionWrapper = new LambdaQueryWrapper<>();
+            sessionWrapper.in(ChatSession::getProjectId, projectIds)
+                    .and(w -> w.eq(ChatSession::getUser1Id, userId).or().eq(ChatSession::getUser2Id, userId));
+            sessions = chatSessionMapper.selectList(sessionWrapper);
+        }
+
+        Map<Integer, Integer> projectToSessionId = new HashMap<>();
+        for (ChatSession s : sessions) {
+            if (s == null || s.getProjectId() == null) {
+                continue;
+            }
+            Project p = projectMap.get(s.getProjectId());
+            if (p == null || p.getPublisherUserId() == null) {
+                continue;
+            }
+            Integer pub = p.getPublisherUserId();
+            boolean pair = (Objects.equals(s.getUser1Id(), userId) && Objects.equals(s.getUser2Id(), pub))
+                    || (Objects.equals(s.getUser2Id(), userId) && Objects.equals(s.getUser1Id(), pub));
+            if (pair) {
+                projectToSessionId.putIfAbsent(s.getProjectId(), s.getSessionId());
+            }
+        }
+
+        List<MyApplicationItemResponse> out = new ArrayList<>();
+        for (TeamApplication app : applications) {
+            MyApplicationItemResponse row = new MyApplicationItemResponse();
+            row.setApplicationId(app.getApplicationId());
+            row.setProjectId(app.getProjectId());
+            Project p = projectMap.get(app.getProjectId());
+            if (p != null) {
+                row.setProjectName(p.getName());
+                row.setBelongTrack(p.getBelongTrack());
+                row.setProjectStatus(p.getStatus());
+            }
+            row.setRole(app.getRole());
+            row.setRequirementId(app.getRequirementId());
+            row.setResult(app.getResult());
+            row.setApplyTime(app.getApplyTime());
+            row.setAuditTime(app.getAuditTime());
+            row.setRemark(app.getRemark());
+            row.setSessionId(projectToSessionId.get(app.getProjectId()));
+            out.add(row);
+        }
+        return out;
     }
 
     @Override

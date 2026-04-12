@@ -9,6 +9,7 @@ import club.boyuan.official.teammatching.dto.request.project.UpdateProjectReques
 import club.boyuan.official.teammatching.dto.request.project.ProjectQueryRequest;
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.project.ApplyProjectResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyApplicationItemResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectCardResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectDetailResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectListResponse;
@@ -176,7 +177,35 @@ public class ProjectController {
             throw e;
         }
     }
-    
+
+    /**
+     * 获取我投递过的项目列表
+     */
+    @GetMapping("/my-applications")
+    @ApiOperation(value = "获取我投递过的项目", notes = "分页查询当前用户对项目的投递记录（立即沟通产生的 team_application），含项目名称、审核状态、会话 ID 等")
+    @NeedLogin
+    @NeedAuth
+    public ResponseEntity<CommonResponse<List<MyApplicationItemResponse>>> listMyApplications(
+            @ApiParam(value = "页码")
+            @RequestParam(value = "page", required = false) Integer page,
+            @ApiParam(value = "每页数量")
+            @RequestParam(value = "size", required = false) Integer size) {
+
+        log.info("收到获取我投递过的项目列表请求");
+        try {
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+            List<MyApplicationItemResponse> list = projectService.listMyApplications(userId, page, size);
+            return ResponseEntity.ok(CommonResponse.ok(list));
+        } catch (Exception e) {
+            log.error("获取我投递过的项目列表失败：userId={}, error={}",
+                    UserContextUtil.getCurrentUserId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
     /**
      * 获取项目详情
      */
