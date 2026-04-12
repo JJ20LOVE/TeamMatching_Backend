@@ -273,6 +273,19 @@ public class ProjectServiceImpl implements ProjectService {
         
         response.setRoleRequirements(roleResponses);
         
+        // 6. 设置当前用户是否已收藏该项目
+        if (currentUserId != null) {
+            LambdaQueryWrapper<Favorite> favoriteWrapper = new LambdaQueryWrapper<>();
+            favoriteWrapper.eq(Favorite::getUserId, currentUserId)
+                    .eq(Favorite::getTargetType, 1)  // 1-项目
+                    .eq(Favorite::getTargetId, projectId);
+            Long count = favoriteMapper.selectCount(favoriteWrapper);
+            response.setIsFavored(count != null && count > 0);
+        } else {
+            // 未登录用户默认为 false
+            response.setIsFavored(false);
+        }
+        
         return response;
     }
     
@@ -556,6 +569,52 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         return buildProjectListResponses(projects);
+    }
+
+    @Override
+    public List<ProjectListResponse> listMyFavoriteProjects(Integer userId, Integer page, Integer size) {
+        long current = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long pageSize = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (current < 1) {
+            current = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+
+        LambdaQueryWrapper<Favorite> favWrapper = new LambdaQueryWrapper<>();
+        favWrapper.eq(Favorite::getUserId, userId)
+                .eq(Favorite::getTargetType, 1)
+                .orderByDesc(Favorite::getCreatedTime);
+
+        Page<Favorite> favPage = new Page<>(current, pageSize);
+        Page<Favorite> paged = favoriteMapper.selectPage(favPage, favWrapper);
+        List<Favorite> favorites = paged.getRecords();
+        if (favorites == null || favorites.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Integer> projectIds = favorites.stream()
+                .map(Favorite::getTargetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (projectIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Project> loaded = projectMapper.selectBatchIds(projectIds);
+        Map<Integer, Project> byId = loaded.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(Project::getProjectId, pr -> pr, (a, b) -> a));
+
+        List<Project> ordered = new ArrayList<>();
+        for (Integer pid : projectIds) {
+            Project pr = byId.get(pid);
+            if (pr != null) {
+                ordered.add(pr);
+            }
+        }
+        return buildProjectListResponses(ordered);
     }
 
     @Override

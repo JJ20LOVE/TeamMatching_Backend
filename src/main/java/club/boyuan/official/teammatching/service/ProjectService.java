@@ -104,6 +104,16 @@ public interface ProjectService {
     List<ProjectListResponse> getProjectList(ProjectQueryRequest request);
 
     /**
+     * 分页获取当前用户收藏的项目列表（与项目广场列表项结构一致）
+     *
+     * @param userId 当前登录用户 ID
+     * @param page   页码（可选，默认 1）
+     * @param size   每页条数（可选，默认 10）
+     * @return 项目列表项，按收藏时间倒序
+     */
+    List<ProjectListResponse> listMyFavoriteProjects(Integer userId, Integer page, Integer size);
+
+    /**
      * 收藏/取消收藏项目（切换）
      * @param projectId 项目 ID
      * @param userId    当前登录用户 ID
