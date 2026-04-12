@@ -65,6 +65,9 @@ public class ProjectDetailResponse {
     @ApiModelProperty(value = "发布时间", example = "2024-01-01T10:00:00Z")
     private LocalDateTime releaseTime;
     
+    @ApiModelProperty(value = "当前用户是否已收藏该项目（未登录或未收藏为false）", example = "false")
+    private Boolean isFavored;
+    
     @ApiModelProperty(value = "角色要求列表")
     private List<ProjectRoleInfo> roleRequirements;
     
