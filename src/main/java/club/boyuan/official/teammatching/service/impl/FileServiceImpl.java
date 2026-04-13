@@ -120,8 +120,31 @@ public class FileServiceImpl implements FileService {
         );
         
         if (existingFile != null) {
-            log.info("文件已存在，返回已有文件信息，fileId: {}", existingFile.getFileId());
-            return buildUploadResponse(existingFile);
+            // 复用已上传的物理文件，但为当前用户/targetType写一条新记录，避免“我的文件”查不到
+            FileResource reuseRecord = new FileResource();
+            reuseRecord.setFileName(file.getOriginalFilename());
+            reuseRecord.setFileKey(existingFile.getFileKey());
+            reuseRecord.setFileUrl(existingFile.getFileUrl());
+            reuseRecord.setFileSize(file.getSize());
+            reuseRecord.setFileType(file.getContentType());
+            reuseRecord.setFileExtension(getFileExtension(file));
+            reuseRecord.setMd5Hash(md5Hash);
+            reuseRecord.setUserId(userId);
+            reuseRecord.setTargetType(targetType);
+            reuseRecord.setTargetId(0);
+            reuseRecord.setIsTemp(isTemp != null ? isTemp : false);
+            reuseRecord.setIsDeleted(false);
+            reuseRecord.setCreatedTime(LocalDateTime.now());
+            reuseRecord.setUpdateTime(LocalDateTime.now());
+            fileResourceMapper.insert(reuseRecord);
+
+            if (Boolean.TRUE.equals(reuseRecord.getIsTemp())) {
+                schedulePhysicalDelete(reuseRecord.getFileId());
+            }
+
+            log.info("文件内容已存在，复用物理文件并创建新记录，newFileId: {}, reusedFileId: {}",
+                    reuseRecord.getFileId(), existingFile.getFileId());
+            return buildUploadResponse(reuseRecord);
         }
         
         // 4. 生成 OSS 对象名称

@@ -34,7 +34,10 @@ public class UpdateProjectRequest {
     
     @ApiModelProperty(value = "项目标签（逗号分隔）", example = "AI，组队")
     private String tags;
-    
+
+    @ApiModelProperty(value = "项目说明等附件文件 ID；传 null 表示不修改；传 0 表示移除附件", example = "10006")
+    private Long attachmentFileId;
+
     @ApiModelProperty(value = "是否允许跨专业申请", example = "true")
     private Boolean allowCrossMajor;
     

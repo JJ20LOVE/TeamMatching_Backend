@@ -67,10 +67,22 @@ public class ProjectDetailResponse {
     
     @ApiModelProperty(value = "当前用户是否已收藏该项目（未登录或未收藏为false）", example = "false")
     private Boolean isFavored;
-    
+
+    @ApiModelProperty(value = "当前用户是否已向该项目投递（立即沟通）；未登录为 false", example = "false")
+    private Boolean hasApplied;
+
     @ApiModelProperty(value = "角色要求列表")
     private List<ProjectRoleInfo> roleRequirements;
-    
+
+    @ApiModelProperty(value = "项目关联附件文件 ID（无附件为 null）", example = "10006")
+    private Long attachmentFileId;
+
+    @ApiModelProperty(value = "项目关联附件原始文件名", example = "项目说明.pdf")
+    private String attachmentFileName;
+
+    @ApiModelProperty(value = "项目关联附件访问 URL", example = "https://example.com/files/10006.pdf")
+    private String attachmentFileUrl;
+
     /**
      * 项目角色信息 DTO（用于详情响应）
      */

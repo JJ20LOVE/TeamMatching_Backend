@@ -43,6 +43,9 @@ public class ProjectListResponse {
     @ApiModelProperty(value = "收藏次数", example = "23")
     private Integer favoriteCount;
 
+    @ApiModelProperty(value = "当前用户是否已向该项目投递过（立即沟通）；未登录为 false", example = "false")
+    private Boolean hasApplied;
+
     @ApiModelProperty(value = "角色汇总信息列表")
     private List<RoleSummary> roleSummaries;
 

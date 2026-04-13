@@ -12,6 +12,7 @@ import club.boyuan.official.teammatching.dto.response.project.ApplyProjectRespon
 import club.boyuan.official.teammatching.dto.response.project.MyApplicationItemResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectListResponse;
 import club.boyuan.official.teammatching.entity.ChatSession;
+import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.entity.Favorite;
 import club.boyuan.official.teammatching.entity.Follow;
 import club.boyuan.official.teammatching.entity.Project;
@@ -23,6 +24,7 @@ import club.boyuan.official.teammatching.exception.ResourceNotFoundException;
 import club.boyuan.official.teammatching.mapper.ProjectMapper;
 import club.boyuan.official.teammatching.mapper.ProjectRoleRequirementMapper;
 import club.boyuan.official.teammatching.mapper.ChatSessionMapper;
+import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.mapper.TeamApplicationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
 import club.boyuan.official.teammatching.mapper.FavoriteMapper;
@@ -67,6 +69,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final UserSkillRelationMapper userSkillRelationMapper;
     private final SkillTagMapper skillTagMapper;
     private final NotificationProducer notificationProducer;
+    private final FileResourceMapper fileResourceMapper;
     
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -95,7 +98,12 @@ public class ProjectServiceImpl implements ProjectService {
         project.setFavoriteCount(0);
         project.setApplyCount(0);
         project.setAuditStatus(1); // TODO: 后续完善审核逻辑
-        
+
+        if (request.getAttachmentFileId() != null) {
+            validateProjectAttachmentForPublisher(request.getAttachmentFileId(), userId);
+            project.setAttachmentFileId(request.getAttachmentFileId());
+        }
+
         projectMapper.insert(project);
         
         // 2. 创建角色要求
@@ -172,7 +180,15 @@ public class ProjectServiceImpl implements ProjectService {
         if (request.getStatus() != null) {
             project.setStatus(request.getStatus());
         }
-        
+        if (request.getAttachmentFileId() != null) {
+            if (request.getAttachmentFileId() == 0L) {
+                project.setAttachmentFileId(null);
+            } else {
+                validateProjectAttachmentForPublisher(request.getAttachmentFileId(), userId);
+                project.setAttachmentFileId(request.getAttachmentFileId());
+            }
+        }
+
         project.setUpdateTime(LocalDateTime.now());
         projectMapper.updateById(project);
         
@@ -286,10 +302,57 @@ public class ProjectServiceImpl implements ProjectService {
             // 未登录用户默认为 false
             response.setIsFavored(false);
         }
-        
+
+        response.setHasApplied(hasUserAppliedToProject(currentUserId, projectId));
+
+        fillProjectAttachmentFields(project, response);
+
         return response;
     }
-    
+
+    private void validateProjectAttachmentForPublisher(Long fileId, Integer publisherUserId) {
+        FileResource fr = fileResourceMapper.selectById(fileId);
+        if (fr == null || Boolean.TRUE.equals(fr.getIsDeleted())) {
+            throw new BusinessException("附件不存在或已删除");
+        }
+        if (!Objects.equals(fr.getUserId(), publisherUserId)) {
+            throw new BusinessException("附件须为当前用户本人上传的文件");
+        }
+    }
+
+    private void fillProjectAttachmentFields(Project project, ProjectDetailResponse response) {
+        Long fid = project.getAttachmentFileId();
+        if (fid == null) {
+            response.setAttachmentFileId(null);
+            response.setAttachmentFileName(null);
+            response.setAttachmentFileUrl(null);
+            return;
+        }
+        FileResource fr = fileResourceMapper.selectById(fid);
+        response.setAttachmentFileId(fid);
+        if (fr == null || Boolean.TRUE.equals(fr.getIsDeleted())) {
+            response.setAttachmentFileName(null);
+            response.setAttachmentFileUrl(null);
+            return;
+        }
+        response.setAttachmentFileName(fr.getFileName());
+        response.setAttachmentFileUrl(fr.getFileUrl());
+    }
+
+    /**
+     * 当前用户是否对该 projectId 存在任意一条投递（与列表 hasApplied 语义一致）
+     */
+    private boolean hasUserAppliedToProject(Integer userId, Integer projectId) {
+        if (userId == null || projectId == null) {
+            return false;
+        }
+        LambdaQueryWrapper<TeamApplication> w = new LambdaQueryWrapper<>();
+        w.eq(TeamApplication::getApplicantUserId, userId)
+                .eq(TeamApplication::getProjectId, projectId);
+        Long count = teamApplicationMapper.selectCount(w);
+        return count != null && count > 0;
+    }
+
     @Override
     public List<ProjectCardResponse> getMyPublishedProjects(Integer userId,
                                                             Integer status,
@@ -615,8 +678,8 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<ProjectListResponse> getProjectList(ProjectQueryRequest request) {
-        log.info("获取项目列表，request: {}", request);
+    public List<ProjectListResponse> getProjectList(ProjectQueryRequest request, Integer currentUserId) {
+        log.info("获取项目列表，request: {}, currentUserId: {}", request, currentUserId);
 
         LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<>();
 
@@ -654,7 +717,7 @@ public class ProjectServiceImpl implements ProjectService {
             return new ArrayList<>();
         }
 
-        return buildProjectListResponses(projects);
+        return buildProjectListResponses(projects, currentUserId);
     }
 
     @Override
@@ -700,7 +763,7 @@ public class ProjectServiceImpl implements ProjectService {
                 ordered.add(pr);
             }
         }
-        return buildProjectListResponses(ordered);
+        return buildProjectListResponses(ordered, userId);
     }
 
     @Override
@@ -783,8 +846,8 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<ProjectListResponse> getSimilarProjects(Integer projectId) {
-        log.info("获取相似项目，projectId: {}", projectId);
+    public List<ProjectListResponse> getSimilarProjects(Integer projectId, Integer currentUserId) {
+        log.info("获取相似项目，projectId: {}, currentUserId: {}", projectId, currentUserId);
 
         Project project = projectMapper.selectById(projectId);
         if (project == null) {
@@ -798,7 +861,7 @@ public class ProjectServiceImpl implements ProjectService {
         wrapper.orderByDesc(Project::getViewCount);
 
         List<Project> projects = projectMapper.selectList(wrapper);
-        return buildProjectListResponses(projects);
+        return buildProjectListResponses(projects, currentUserId);
     }
 
     @Override
@@ -849,7 +912,7 @@ public class ProjectServiceImpl implements ProjectService {
         int limit = Math.min(30, scored.size());
         List<Project> topProjects = scored.subList(0, limit).stream().map(ScoredProject::project).toList();
 
-        return buildProjectListResponses(topProjects);
+        return buildProjectListResponses(topProjects, userId);
     }
 
     private List<Project> queryMatchedCandidates(boolean requireAuditApproved) {
@@ -1136,7 +1199,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     private record ScoredProject(Project project, double score) { }
 
-    private List<ProjectListResponse> buildProjectListResponses(List<Project> projects) {
+    private List<ProjectListResponse> buildProjectListResponses(List<Project> projects, Integer currentUserId) {
         if (projects == null || projects.isEmpty()) {
             return new ArrayList<>();
         }
@@ -1166,6 +1229,18 @@ public class ProjectServiceImpl implements ProjectService {
         Map<Integer, List<ProjectRoleRequirements>> requirementsByProject = allRequirements.stream()
                 .collect(Collectors.groupingBy(ProjectRoleRequirements::getProjectId));
 
+        Set<Integer> appliedProjectIds = Collections.emptySet();
+        if (currentUserId != null && !projectIds.isEmpty()) {
+            LambdaQueryWrapper<TeamApplication> appWrapper = new LambdaQueryWrapper<>();
+            appWrapper.eq(TeamApplication::getApplicantUserId, currentUserId)
+                    .in(TeamApplication::getProjectId, projectIds);
+            List<TeamApplication> applications = teamApplicationMapper.selectList(appWrapper);
+            appliedProjectIds = applications.stream()
+                    .map(TeamApplication::getProjectId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+        }
+
         List<ProjectListResponse> result = new ArrayList<>();
 
         for (Project project : projects) {
@@ -1178,6 +1253,7 @@ public class ProjectServiceImpl implements ProjectService {
             item.setStatus(project.getStatus());
             item.setViewCount(project.getViewCount());
             item.setFavoriteCount(project.getFavoriteCount());
+            item.setHasApplied(currentUserId != null && appliedProjectIds.contains(project.getProjectId()));
 
             // 发布人信息
             User publisher = userMap.get(project.getPublisherUserId());

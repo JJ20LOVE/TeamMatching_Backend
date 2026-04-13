@@ -349,7 +349,8 @@ public class ProjectController {
             request.setPage(page);
             request.setSize(size);
 
-            List<ProjectListResponse> list = projectService.getProjectList(request);
+            Integer currentUserId = UserContextUtil.getCurrentUserId();
+            List<ProjectListResponse> list = projectService.getProjectList(request, currentUserId);
             return ResponseEntity.ok(CommonResponse.ok(list));
         } catch (Exception e) {
             log.error("获取项目列表失败，error={}", e.getMessage(), e);
@@ -370,7 +371,8 @@ public class ProjectController {
         log.info("收到获取相似项目请求，projectId: {}", projectId);
 
         try {
-            List<ProjectListResponse> list = projectService.getSimilarProjects(projectId);
+            Integer currentUserId = UserContextUtil.getCurrentUserId();
+            List<ProjectListResponse> list = projectService.getSimilarProjects(projectId, currentUserId);
             return ResponseEntity.ok(CommonResponse.ok(list));
         } catch (Exception e) {
             log.error("获取相似项目失败：projectId={}, error={}", projectId, e.getMessage(), e);

@@ -135,6 +135,7 @@ CREATE TABLE project (
                          project_progress TEXT COMMENT '项目进展说明',
                          project_features TEXT COMMENT '项目特点/亮点',
                          tags VARCHAR(255) COMMENT '项目标签（逗号分隔）',
+                         attachment_file_id BIGINT NULL COMMENT '项目说明等关联附件，关联file_resource表',
                          allow_cross_major_application BOOLEAN DEFAULT TRUE COMMENT '是否允许跨专业申请',
 
                          publisher_user_id INT NOT NULL COMMENT '发布人ID，关联user表',

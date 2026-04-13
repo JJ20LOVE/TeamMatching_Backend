@@ -111,7 +111,7 @@ public interface ProjectService {
      * @param request 查询条件
      * @return 项目列表
      */
-    List<ProjectListResponse> getProjectList(ProjectQueryRequest request);
+    List<ProjectListResponse> getProjectList(ProjectQueryRequest request, Integer currentUserId);
 
     /**
      * 分页获取当前用户收藏的项目列表（与项目广场列表项结构一致）
@@ -144,7 +144,7 @@ public interface ProjectService {
      * @param projectId 项目 ID
      * @return 相似项目列表
      */
-    List<ProjectListResponse> getSimilarProjects(Integer projectId);
+    List<ProjectListResponse> getSimilarProjects(Integer projectId, Integer currentUserId);
 
     /**
      * 智能匹配项目（基于用户画像的推荐）
