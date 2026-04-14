@@ -115,7 +115,6 @@ public class TalentServiceImpl implements TalentService {
                 .eq(User::getUserId, currentUserId)
                 .set(User::getTalentCardId, card.getCardId())
                 .set(User::getIsTalentVisible, card.getIsVisible())
-                .set(User::getContactInfo, StringUtils.hasText(request.getContactInfo()) ? request.getContactInfo().trim() : null)
                 .set(User::getUpdateTime, now);
         userMapper.update(null, userUpdate);
 
@@ -519,7 +518,6 @@ public class TalentServiceImpl implements TalentService {
     }
 
     private TalentDetailResponse toTalentDetailResponse(TalentCard card) {
-        User user = userMapper.selectById(card.getUserId());
         TalentDetailResponse response = new TalentDetailResponse();
         response.setCardId(card.getCardId());
         response.setUserId(card.getUserId());
@@ -537,7 +535,6 @@ public class TalentServiceImpl implements TalentService {
         response.setResumeUrl(resolveFileUrlById(card.getResumeFileId()));
         response.setPortfolioUrl(resolveFileUrlById(card.getPortfolioFileId()));
         response.setGithubUrl(card.getGithubUrl());
-        response.setContactInfo(user != null ? user.getContactInfo() : null);
         response.setViewCount(card.getViewCount());
         response.setInviteCount(card.getInviteCount());
         response.setCreatedTime(card.getCreatedTime());

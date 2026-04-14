@@ -39,9 +39,4 @@ public class CreateTalentCardRequest {
     private String portfolioUrl;
 
     private String githubUrl;
-
-    /**
-     * 联系方式（用于邀请场景展示，如微信号）
-     */
-    private String contactInfo;
 }

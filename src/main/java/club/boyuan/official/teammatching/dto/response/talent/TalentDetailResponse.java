@@ -42,8 +42,6 @@ public class TalentDetailResponse {
 
     private String githubUrl;
 
-    private String contactInfo;
-
     private Integer viewCount;
 
     private Integer inviteCount;
