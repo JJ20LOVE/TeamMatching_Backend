@@ -24,7 +24,16 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-  
+  flyway:
+    enabled: true
+    # 允许 Flyway 清空数据库（这是 clean-on-validation-error 生效的前提）
+    clean-disabled: false
+    # 如果校验失败（比如你刚才遇到的脏库），自动执行 clean 重新跑所有脚本
+    clean-on-validation-error: true
+    # 关键！如果是第一次对接已有数据的库，必须开启这个才能识别基准线
+    baseline-on-migrate: true
+    # 指定基准版本号
+    baseline-version: 1
   # 邮件配置
   mail:
     enabled: ${MAIL_ENABLED:true}
