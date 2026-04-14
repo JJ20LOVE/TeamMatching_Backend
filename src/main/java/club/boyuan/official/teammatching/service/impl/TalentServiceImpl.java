@@ -7,6 +7,7 @@ import club.boyuan.official.teammatching.dto.request.talent.TalentQueryRequest;
 import club.boyuan.official.teammatching.dto.request.talent.UpdateTalentStatusRequest;
 import club.boyuan.official.teammatching.dto.response.talent.TalentCardResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentDetailResponse;
+import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationListItemResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentPageResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentSaveResponse;
@@ -35,8 +36,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -307,6 +311,76 @@ public class TalentServiceImpl implements TalentService {
         response.setStatus(invitation.getStatus());
         response.setSendTime(invitation.getSendTime());
         return response;
+    }
+
+    @Override
+    public List<TalentInvitationListItemResponse> listSentInvitations(Integer currentUserId, Integer page, Integer size) {
+        long current = page == null || page < 1 ? 1L : page;
+        long pageSize = size == null || size < 1 ? 10L : size;
+
+        LambdaQueryWrapper<TalentInvitation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TalentInvitation::getCaptainId, currentUserId)
+                .orderByDesc(TalentInvitation::getSendTime, TalentInvitation::getInvitationId);
+        Page<TalentInvitation> pageParam = new Page<>(current, pageSize);
+        List<TalentInvitation> records = talentInvitationMapper.selectPage(pageParam, wrapper).getRecords();
+        if (records == null || records.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return buildInvitationItems(records, false);
+    }
+
+    @Override
+    public List<TalentInvitationListItemResponse> listReceivedInvitations(Integer currentUserId, Integer page, Integer size) {
+        long current = page == null || page < 1 ? 1L : page;
+        long pageSize = size == null || size < 1 ? 10L : size;
+
+        LambdaQueryWrapper<TalentInvitation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TalentInvitation::getTalentId, currentUserId)
+                .orderByDesc(TalentInvitation::getSendTime, TalentInvitation::getInvitationId);
+        Page<TalentInvitation> pageParam = new Page<>(current, pageSize);
+        List<TalentInvitation> records = talentInvitationMapper.selectPage(pageParam, wrapper).getRecords();
+        if (records == null || records.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return buildInvitationItems(records, true);
+    }
+
+    private List<TalentInvitationListItemResponse> buildInvitationItems(List<TalentInvitation> records, boolean receivedView) {
+        List<Integer> counterpartUserIds = records.stream()
+                .map(item -> receivedView ? item.getCaptainId() : item.getTalentId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Integer, User> userMap = new HashMap<>();
+        if (!counterpartUserIds.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(counterpartUserIds);
+            userMap = users.stream().collect(Collectors.toMap(User::getUserId, u -> u, (a, b) -> a));
+        }
+
+        List<TalentInvitationListItemResponse> out = new ArrayList<>();
+        for (TalentInvitation inv : records) {
+            TalentInvitationListItemResponse row = new TalentInvitationListItemResponse();
+            row.setInvitationId(inv.getInvitationId());
+            row.setProjectId(inv.getProjectId());
+            row.setProjectName(inv.getProjectName());
+            row.setProjectRole(inv.getProjectRole());
+            row.setTalentCardId(inv.getTalentCardId());
+            row.setInvitationMessage(inv.getInvitationMessage());
+            row.setStatus(inv.getStatus());
+            row.setReadStatus(inv.getReadStatus());
+            row.setSendTime(inv.getSendTime());
+            row.setResponseTime(inv.getResponseTime());
+            Integer counterpartUserId = receivedView ? inv.getCaptainId() : inv.getTalentId();
+            row.setCounterpartUserId(counterpartUserId);
+
+            User counterpart = userMap.get(counterpartUserId);
+            if (counterpart != null) {
+                row.setCounterpartNickname(counterpart.getNickname());
+                row.setCounterpartAvatar(counterpart.getAvatarFileId() != null ? counterpart.getAvatarFileId().toString() : null);
+            }
+            out.add(row);
+        }
+        return out;
     }
 
     private User getUserOrThrow(Integer userId) {

@@ -10,6 +10,7 @@ import club.boyuan.official.teammatching.dto.request.talent.UpdateTalentStatusRe
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentCardResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentDetailResponse;
+import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationListItemResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentPageResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentSaveResponse;
@@ -27,7 +28,9 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
 
 /**
  * 人才相关控制器
@@ -92,6 +95,30 @@ public class TalentController {
             @Valid @RequestBody TalentInviteRequest request) {
         Integer currentUserId = requireCurrentUserId();
         TalentInvitationResponse response = talentService.sendInvitation(currentUserId, request);
+        return ResponseEntity.ok(CommonResponse.ok(response));
+    }
+
+    @GetMapping("/invitation/sent")
+    @NeedLogin
+    @NeedAuth
+    @ApiOperation(value = "获取我发送的邀请", notes = "人才广场-组队邀请中我发送的邀请列表")
+    public ResponseEntity<CommonResponse<List<TalentInvitationListItemResponse>>> listSentInvitations(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
+        Integer currentUserId = requireCurrentUserId();
+        List<TalentInvitationListItemResponse> response = talentService.listSentInvitations(currentUserId, page, size);
+        return ResponseEntity.ok(CommonResponse.ok(response));
+    }
+
+    @GetMapping("/invitation/received")
+    @NeedLogin
+    @NeedAuth
+    @ApiOperation(value = "获取我收到的邀请", notes = "人才广场-组队邀请中我收到的邀请列表")
+    public ResponseEntity<CommonResponse<List<TalentInvitationListItemResponse>>> listReceivedInvitations(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
+        Integer currentUserId = requireCurrentUserId();
+        List<TalentInvitationListItemResponse> response = talentService.listReceivedInvitations(currentUserId, page, size);
         return ResponseEntity.ok(CommonResponse.ok(response));
     }
 

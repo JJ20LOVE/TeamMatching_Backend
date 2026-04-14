@@ -8,6 +8,7 @@ import club.boyuan.official.teammatching.dto.response.project.ProjectDetailRespo
 import club.boyuan.official.teammatching.dto.response.project.ProjectCardResponse;
 import club.boyuan.official.teammatching.dto.response.project.ApplyProjectResponse;
 import club.boyuan.official.teammatching.dto.response.project.MyApplicationItemResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyReceivedApplicationItemResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectListResponse;
 import club.boyuan.official.teammatching.entity.Project;
 
@@ -90,6 +91,15 @@ public interface ProjectService {
      * @param size   每页条数，默认 10
      */
     List<MyApplicationItemResponse> listMyApplications(Integer userId, Integer page, Integer size);
+
+    /**
+     * 分页查询当前用户收到的申请（项目发布者视角）
+     *
+     * @param userId 当前用户 ID
+     * @param page   页码，默认 1
+     * @param size   每页条数，默认 10
+     */
+    List<MyReceivedApplicationItemResponse> listMyReceivedApplications(Integer userId, Integer page, Integer size);
 
     /**
      * 更新项目状态
