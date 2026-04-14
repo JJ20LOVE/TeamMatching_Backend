@@ -57,6 +57,9 @@ public class User implements Serializable {
     @ApiModelProperty(value = "邮箱地址")
     private String email;
 
+    @ApiModelProperty(value = "联系方式（邀请场景展示，如微信号）")
+    private String contactInfo;
+
     @ApiModelProperty(value = "密码，加密存储（BCrypt）")
     private String password;
 

@@ -21,6 +21,8 @@ public interface TalentService {
 
     TalentDetailResponse getMyCard(Integer currentUserId);
 
+    TalentDetailResponse getCardDetail(Integer currentUserId, Integer cardId);
+
     TalentPageResponse<TalentCardResponse> listTalents(Integer currentUserId, TalentQueryRequest request);
 
     void updateVisibility(Integer currentUserId, UpdateTalentStatusRequest request);

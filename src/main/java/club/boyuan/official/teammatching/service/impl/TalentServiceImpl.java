@@ -131,28 +131,27 @@ public class TalentServiceImpl implements TalentService {
         if (card == null) {
             throw new BusinessException("人才卡不存在，请先创建");
         }
+        return toTalentDetailResponse(card);
+    }
 
-        TalentDetailResponse response = new TalentDetailResponse();
-        response.setCardId(card.getCardId());
-        response.setUserId(card.getUserId());
-        response.setStatus(card.getStatus());
-        response.setIsVisible(card.getIsVisible());
-        response.setDisplayName(card.getDisplayName());
-        response.setMajor(card.getMajor());
-        response.setGrade(card.getGrade());
-        response.setCardTitle(card.getCardTitle());
-        response.setTargetDirection(card.getTargetDirection());
-        response.setExpectedCompetition(card.getExpectedCompetition());
-        response.setExpectedRole(card.getExpectedRole());
-        response.setSelfStatement(card.getSelfStatement());
-        response.setSkillTags(card.getSkillTags());
-        response.setResumeUrl(resolveFileUrlById(card.getResumeFileId()));
-        response.setPortfolioUrl(resolveFileUrlById(card.getPortfolioFileId()));
-        response.setGithubUrl(card.getGithubUrl());
-        response.setViewCount(card.getViewCount());
-        response.setInviteCount(card.getInviteCount());
-        response.setCreatedTime(card.getCreatedTime());
-        return response;
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TalentDetailResponse getCardDetail(Integer currentUserId, Integer cardId) {
+        TalentCard card = talentCardMapper.selectById(cardId);
+        if (card == null) {
+            throw new BusinessException("人才卡不存在");
+        }
+        boolean isOwner = Objects.equals(card.getUserId(), currentUserId);
+        if (!isOwner && (!Boolean.TRUE.equals(card.getIsVisible()) || !Objects.equals(card.getStatus(), CARD_STATUS_OPEN))) {
+            throw new BusinessException("人才卡不可见");
+        }
+        if (!isOwner) {
+            LocalDateTime now = LocalDateTime.now();
+            card.setViewCount((card.getViewCount() == null ? 0 : card.getViewCount()) + 1);
+            card.setUpdateTime(now);
+            talentCardMapper.updateById(card);
+        }
+        return toTalentDetailResponse(card);
     }
 
     @Override
@@ -238,7 +237,12 @@ public class TalentServiceImpl implements TalentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TalentInvitationResponse sendInvitation(Integer currentUserId, TalentInviteRequest request) {
-        getUserOrThrow(currentUserId);
+        User captainUser = getUserOrThrow(currentUserId);
+        if (StringUtils.hasText(request.getContactInfo())) {
+            captainUser.setContactInfo(request.getContactInfo().trim());
+            captainUser.setUpdateTime(LocalDateTime.now());
+            userMapper.updateById(captainUser);
+        }
 
         TalentCard talentCard = talentCardMapper.selectById(request.getTalentCardId());
         if (talentCard == null) {
@@ -248,57 +252,66 @@ public class TalentServiceImpl implements TalentService {
             throw new BusinessException("不能邀请自己");
         }
 
-        Project project = projectMapper.selectById(request.getProjectId());
-        if (project == null) {
-            throw new BusinessException("项目不存在");
-        }
-        if (!Objects.equals(project.getPublisherUserId(), currentUserId)) {
-            throw new BusinessException("当前用户不是该项目发布者，不能发送邀请");
-        }
-
-        Long duplicated = talentInvitationMapper.selectCount(
-                new LambdaQueryWrapper<TalentInvitation>()
-                        .eq(TalentInvitation::getCaptainId, currentUserId)
-                        .eq(TalentInvitation::getProjectId, request.getProjectId())
-                        .eq(TalentInvitation::getTalentCardId, request.getTalentCardId())
-                        .eq(TalentInvitation::getStatus, INVITATION_STATUS_PENDING)
-        );
-        if (duplicated != null && duplicated > 0) {
-            throw new BusinessException("该人才卡已存在待处理邀请，请勿重复发送");
-        }
+        List<InvitationProjectContext> inviteProjects = resolveInviteProjects(currentUserId, request);
 
         LocalDateTime now = LocalDateTime.now();
-        TalentInvitation invitation = new TalentInvitation();
-        invitation.setCaptainId(currentUserId);
-        invitation.setTalentId(talentCard.getUserId());
-        invitation.setProjectId(request.getProjectId());
-        invitation.setTalentCardId(request.getTalentCardId());
-        invitation.setInvitationMessage(request.getInvitationMessage());
-        invitation.setProjectName(project.getName());
-        invitation.setProjectRole(request.getProjectRole());
-        invitation.setStatus(INVITATION_STATUS_PENDING);
-        invitation.setReadStatus(false);
-        invitation.setSendTime(now);
-        talentInvitationMapper.insert(invitation);
+        List<TalentInvitation> createdInvitations = new ArrayList<>();
+        for (InvitationProjectContext ctx : inviteProjects) {
+            LambdaQueryWrapper<TalentInvitation> duplicatedWrapper = new LambdaQueryWrapper<TalentInvitation>()
+                    .eq(TalentInvitation::getCaptainId, currentUserId)
+                    .eq(TalentInvitation::getTalentCardId, request.getTalentCardId())
+                    .eq(TalentInvitation::getStatus, INVITATION_STATUS_PENDING);
+            if (ctx.projectId != null) {
+                duplicatedWrapper.eq(TalentInvitation::getProjectId, ctx.projectId);
+            } else {
+                duplicatedWrapper.isNull(TalentInvitation::getProjectId);
+                if (StringUtils.hasText(ctx.projectName)) {
+                    duplicatedWrapper.eq(TalentInvitation::getProjectName, ctx.projectName);
+                } else {
+                    duplicatedWrapper.isNull(TalentInvitation::getProjectName);
+                }
+            }
+            Long duplicated = talentInvitationMapper.selectCount(duplicatedWrapper);
+            if (duplicated != null && duplicated > 0) {
+                throw new BusinessException("该人才卡已存在待处理邀请，请勿重复发送");
+            }
+
+            TalentInvitation invitation = new TalentInvitation();
+            invitation.setCaptainId(currentUserId);
+            invitation.setTalentId(talentCard.getUserId());
+            invitation.setProjectId(ctx.projectId);
+            invitation.setTalentCardId(request.getTalentCardId());
+            invitation.setInvitationMessage(request.getInvitationMessage());
+            invitation.setProjectName(ctx.projectName);
+            invitation.setProjectRole(request.getProjectRole());
+            invitation.setStatus(INVITATION_STATUS_PENDING);
+            invitation.setReadStatus(false);
+            invitation.setSendTime(now);
+            talentInvitationMapper.insert(invitation);
+            createdInvitations.add(invitation);
+        }
 
         User talentUser = userMapper.selectById(talentCard.getUserId());
         if (talentUser != null && NotificationPreferenceUtils.isChannelEnabled(talentUser.getInvitationNotify())) {
             User captain = userMapper.selectById(currentUserId);
             String capName = captain != null && StringUtils.hasText(captain.getNickname()) ? captain.getNickname() : "队长";
+            String displayProjectName = StringUtils.hasText(createdInvitations.get(0).getProjectName())
+                    ? createdInvitations.get(0).getProjectName() : "未命名项目";
             notificationProducer.publishInvitation(
                     talentCard.getUserId(),
                     "组队邀请",
-                    capName + " 邀请你加入项目「" + project.getName() + "」",
+                    capName + " 邀请你加入项目「" + displayProjectName + "」",
                     "talent_invitation",
-                    String.valueOf(invitation.getInvitationId()));
+                    String.valueOf(createdInvitations.get(0).getInvitationId()));
         }
 
         LambdaUpdateWrapper<TalentCard> cardUpdate = new LambdaUpdateWrapper<TalentCard>()
                 .eq(TalentCard::getCardId, talentCard.getCardId())
-                .setSql("invite_count = IFNULL(invite_count, 0) + 1")
+                .setSql("invite_count = IFNULL(invite_count, 0) + " + createdInvitations.size())
                 .set(TalentCard::getUpdateTime, now);
         talentCardMapper.update(null, cardUpdate);
 
+        TalentInvitation invitation = createdInvitations.get(0);
         TalentInvitationResponse response = new TalentInvitationResponse();
         response.setInvitationId(invitation.getInvitationId());
         response.setCaptainId(invitation.getCaptainId());
@@ -308,10 +321,52 @@ public class TalentServiceImpl implements TalentService {
         response.setProjectName(invitation.getProjectName());
         response.setProjectRole(invitation.getProjectRole());
         response.setInvitationMessage(invitation.getInvitationMessage());
+        response.setContactInfo(captainUser.getContactInfo());
         response.setStatus(invitation.getStatus());
         response.setSendTime(invitation.getSendTime());
         return response;
     }
+
+    private List<InvitationProjectContext> resolveInviteProjects(Integer currentUserId, TalentInviteRequest request) {
+        boolean hasManualInput = Boolean.TRUE.equals(request.getHasManualInput());
+        if (hasManualInput) {
+            if (!StringUtils.hasText(request.getCustomProjectName())) {
+                throw new BusinessException("hasManualInput=true 时 customProjectName 不能为空");
+            }
+            return List.of(new InvitationProjectContext(null, request.getCustomProjectName().trim()));
+        }
+
+        Set<Integer> projectIds = new java.util.LinkedHashSet<>();
+        if (request.getProjectId() != null) {
+            projectIds.add(request.getProjectId());
+        }
+        if (request.getProjectIds() != null) {
+            for (Integer pid : request.getProjectIds()) {
+                if (pid != null) {
+                    projectIds.add(pid);
+                }
+            }
+        }
+        if (projectIds.isEmpty()) {
+            // 允许不选项目也不手动输入：发送“泛邀请”，项目字段为空
+            return List.of(new InvitationProjectContext(null, null));
+        }
+
+        List<Project> projects = projectMapper.selectBatchIds(projectIds);
+        if (projects == null || projects.size() != projectIds.size()) {
+            throw new BusinessException("存在无效项目ID");
+        }
+        List<InvitationProjectContext> contexts = new ArrayList<>();
+        for (Project p : projects) {
+            if (!Objects.equals(p.getPublisherUserId(), currentUserId)) {
+                throw new BusinessException("包含非当前用户发布的项目，不能发送邀请");
+            }
+            contexts.add(new InvitationProjectContext(p.getProjectId(), p.getName()));
+        }
+        return contexts;
+    }
+
+    private record InvitationProjectContext(Integer projectId, String projectName) { }
 
     @Override
     public List<TalentInvitationListItemResponse> listSentInvitations(Integer currentUserId, Integer page, Integer size) {
@@ -346,14 +401,13 @@ public class TalentServiceImpl implements TalentService {
     }
 
     private List<TalentInvitationListItemResponse> buildInvitationItems(List<TalentInvitation> records, boolean receivedView) {
-        List<Integer> counterpartUserIds = records.stream()
-                .map(item -> receivedView ? item.getCaptainId() : item.getTalentId())
+        Set<Integer> userIdsForLookup = records.stream()
+                .flatMap(item -> java.util.stream.Stream.of(item.getCaptainId(), receivedView ? item.getCaptainId() : item.getTalentId()))
                 .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
+                .collect(Collectors.toSet());
         Map<Integer, User> userMap = new HashMap<>();
-        if (!counterpartUserIds.isEmpty()) {
-            List<User> users = userMapper.selectBatchIds(counterpartUserIds);
+        if (!userIdsForLookup.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(userIdsForLookup);
             userMap = users.stream().collect(Collectors.toMap(User::getUserId, u -> u, (a, b) -> a));
         }
 
@@ -377,6 +431,10 @@ public class TalentServiceImpl implements TalentService {
             if (counterpart != null) {
                 row.setCounterpartNickname(counterpart.getNickname());
                 row.setCounterpartAvatar(counterpart.getAvatarFileId() != null ? counterpart.getAvatarFileId().toString() : null);
+            }
+            User captain = userMap.get(inv.getCaptainId());
+            if (captain != null) {
+                row.setContactInfo(captain.getContactInfo());
             }
             out.add(row);
         }
@@ -457,6 +515,30 @@ public class TalentServiceImpl implements TalentService {
             return currentUser.getNickname();
         }
         return currentUser.getUsername();
+    }
+
+    private TalentDetailResponse toTalentDetailResponse(TalentCard card) {
+        TalentDetailResponse response = new TalentDetailResponse();
+        response.setCardId(card.getCardId());
+        response.setUserId(card.getUserId());
+        response.setStatus(card.getStatus());
+        response.setIsVisible(card.getIsVisible());
+        response.setDisplayName(card.getDisplayName());
+        response.setMajor(card.getMajor());
+        response.setGrade(card.getGrade());
+        response.setCardTitle(card.getCardTitle());
+        response.setTargetDirection(card.getTargetDirection());
+        response.setExpectedCompetition(card.getExpectedCompetition());
+        response.setExpectedRole(card.getExpectedRole());
+        response.setSelfStatement(card.getSelfStatement());
+        response.setSkillTags(card.getSkillTags());
+        response.setResumeUrl(resolveFileUrlById(card.getResumeFileId()));
+        response.setPortfolioUrl(resolveFileUrlById(card.getPortfolioFileId()));
+        response.setGithubUrl(card.getGithubUrl());
+        response.setViewCount(card.getViewCount());
+        response.setInviteCount(card.getInviteCount());
+        response.setCreatedTime(card.getCreatedTime());
+        return response;
     }
 
     private String normalizeSort(String sort) {

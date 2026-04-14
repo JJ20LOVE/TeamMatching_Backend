@@ -26,6 +26,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -36,7 +37,7 @@ import java.util.List;
  * 人才相关控制器
  */
 @RestController
-@RequestMapping("/v1/talent")
+@RequestMapping("/talent")
 @RequiredArgsConstructor
 @Validated
 @Api(tags = "人才广场")
@@ -64,6 +65,16 @@ public class TalentController {
     public ResponseEntity<CommonResponse<TalentDetailResponse>> getMyCard() {
         Integer currentUserId = requireCurrentUserId();
         TalentDetailResponse response = talentService.getMyCard(currentUserId);
+        return ResponseEntity.ok(CommonResponse.ok(response));
+    }
+
+    @GetMapping("/card/{cardId}")
+    @NeedLogin
+    @ApiOperation(value = "获取人才卡片详情", notes = "根据 cardId 获取人才卡片详情")
+    public ResponseEntity<CommonResponse<TalentDetailResponse>> getCardDetail(
+            @PathVariable Integer cardId) {
+        Integer currentUserId = requireCurrentUserId();
+        TalentDetailResponse response = talentService.getCardDetail(currentUserId, cardId);
         return ResponseEntity.ok(CommonResponse.ok(response));
     }
 

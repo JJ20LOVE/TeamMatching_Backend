@@ -32,6 +32,9 @@ public class TalentInvitationListItemResponse {
     @ApiModelProperty(value = "邀请附言")
     private String invitationMessage;
 
+    @ApiModelProperty(value = "联系方式")
+    private String contactInfo;
+
     @ApiModelProperty(value = "状态：0-待回复 1-已接受 2-已拒绝 3-已过期")
     private Integer status;
 
