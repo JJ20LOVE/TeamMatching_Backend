@@ -49,4 +49,44 @@ public class RedisConstants {
      * 通知异步队列（Redis List，JSON 字符串元素；生产者 {@code RPUSH}，消费者建议 {@code BLPOP}）
      */
     public static final String NOTIFICATION_QUEUE_KEY = "queue:notification";
+
+    // ==================== 缓存 Key 前缀 ====================
+
+    /**
+     * 缓存通用前缀
+     */
+    public static final String CACHE_KEY_PREFIX = "cache:";
+
+    /**
+     * 项目模块缓存前缀
+     */
+    public static final String CACHE_PROJECT = CACHE_KEY_PREFIX + "project:";
+
+    /**
+     * 社区模块缓存前缀
+     */
+    public static final String CACHE_COMMUNITY = CACHE_KEY_PREFIX + "community:";
+
+    /**
+     * 人才模块缓存前缀
+     */
+    public static final String CACHE_TALENT = CACHE_KEY_PREFIX + "talent:";
+
+    /**
+     * 用户模块缓存前缀
+     */
+    public static final String CACHE_USER = CACHE_KEY_PREFIX + "user:";
+
+    // ==================== 缓存 TTL（秒） ====================
+
+    /** 智能匹配结果缓存 TTL */
+    public static final long CACHE_TTL_MATCH = 60;
+    /** 列表缓存 TTL */
+    public static final long CACHE_TTL_LIST = 300;
+    /** 详情缓存 TTL */
+    public static final long CACHE_TTL_DETAIL = 600;
+    /** 统计数据缓存 TTL */
+    public static final long CACHE_TTL_STATS = 120;
+    /** 默认缓存 TTL */
+    public static final long CACHE_TTL_DEFAULT = 300;
 }

@@ -45,6 +45,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+
 /**
  * 社区服务实现
  */
@@ -69,6 +73,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
         this.fileResourceMapper = fileResourceMapper;
     }
     @Override
+    @CacheEvict(cacheNames = "communityList", allEntries = true)
     public Number createNewPost(CreatePostRequest request, Integer userId) {
         // 1. 实例化实体类
         CommunityPost post = new CommunityPost();
@@ -130,6 +135,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
     }
 
     @Override
+    @Cacheable(cacheNames = "communityList", key = "#request.hashCode() + ':' + #userId", unless = "#result == null || #result.isEmpty()")
     public List<PostListResponse.CommunityPostItem> queryPostList(CommunityQueryRequest request, Integer userId) {
         LambdaQueryWrapper<CommunityPost> wrapper = new LambdaQueryWrapper<>();
 
@@ -198,6 +204,10 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @Caching(evict = {
+        @CacheEvict(cacheNames = "communityDetail", key = "#postId"),
+        @CacheEvict(cacheNames = "communityComments", allEntries = true)
+    })
     public Long createNewComment(Long postId, CreateCommentRequest request, Integer userId) {
         // 1. 基础校验：推荐使用 Assert 语法或自定义工具类，让代码更清爽
         if (postId == null || postId <= 0) throw new BusinessException("帖子ID错误");
@@ -252,6 +262,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
     @Transactional
     @Override
+    @CacheEvict(cacheNames = "communityDetail", key = "#request.targetId")
     public LikeResponse toggleLikeStatus(LikeRequest request, Integer userId) {
         if (request == null) {
             throw new BusinessException("请求不能为空");
@@ -318,6 +329,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @Cacheable(cacheNames = "communityDetail", key = "#postId", unless = "#result == null")
     public CommunityPostDetailItem getPostDetail(Long postId) {
         if (postId == null || postId <= 0) {
             throw new ResourceNotFoundException("帖子不存在");
@@ -363,6 +375,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
     }
 
     @Override
+    @Cacheable(cacheNames = "communityComments", key = "#postId + ':' + #page + ':' + #size", unless = "#result == null || #result.isEmpty()")
     public List<CommunityCommentItem> getPostComments(Long postId, Integer page, Integer size) {
         if (postId == null || postId <= 0) {
             throw new ResourceNotFoundException("帖子不存在");
@@ -448,6 +461,7 @@ public class CommunityServiceImpl extends ServiceImpl<CommunityPostMapper, Commu
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "communityComments", allEntries = true)
     public CommentDeleteVO deleteComment(Long commentId, Integer operatorUserId) {
         if (commentId == null || commentId <= 0) {
             throw new ResourceNotFoundException("评论不存在");

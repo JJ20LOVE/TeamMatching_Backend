@@ -2,6 +2,8 @@ package club.boyuan.official.teammatching.service.impl;
 
 import club.boyuan.official.teammatching.common.constants.TalentSortConstants;
 import club.boyuan.official.teammatching.dto.request.talent.CreateTalentCardRequest;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import club.boyuan.official.teammatching.dto.request.talent.TalentInviteRequest;
 import club.boyuan.official.teammatching.dto.request.talent.TalentQueryRequest;
 import club.boyuan.official.teammatching.dto.request.talent.UpdateTalentStatusRequest;
@@ -63,6 +65,7 @@ public class TalentServiceImpl implements TalentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "talentDetail", allEntries = true)
     public TalentSaveResponse saveOrUpdateCard(Integer currentUserId, CreateTalentCardRequest request) {
         User currentUser = getUserOrThrow(currentUserId);
         if (!Objects.equals(currentUser.getAuthStatus(), USER_AUTH_PASSED)) {
@@ -126,6 +129,7 @@ public class TalentServiceImpl implements TalentService {
     }
 
     @Override
+    @Cacheable(cacheNames = "talentDetail", key = "'my:' + #currentUserId", unless = "#result == null")
     public TalentDetailResponse getMyCard(Integer currentUserId) {
         TalentCard card = getCardByUserId(currentUserId);
         if (card == null) {
@@ -136,6 +140,7 @@ public class TalentServiceImpl implements TalentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @Cacheable(cacheNames = "talentDetail", key = "#currentUserId + ':' + #cardId", unless = "#result == null")
     public TalentDetailResponse getCardDetail(Integer currentUserId, Integer cardId) {
         TalentCard card = talentCardMapper.selectById(cardId);
         if (card == null) {
@@ -155,6 +160,7 @@ public class TalentServiceImpl implements TalentService {
     }
 
     @Override
+    @Cacheable(cacheNames = "talentList", key = "#currentUserId + ':' + #request.hashCode()", unless = "#result == null || #result.records == null || #result.records.isEmpty()")
     public TalentPageResponse<TalentCardResponse> listTalents(Integer currentUserId, TalentQueryRequest request) {
         long current = resolveCurrentPage(request);
         long size = resolvePageSize(request);
@@ -213,6 +219,7 @@ public class TalentServiceImpl implements TalentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "talentDetail", allEntries = true)
     public void updateVisibility(Integer currentUserId, UpdateTalentStatusRequest request) {
         TalentCard card = getCardByUserId(currentUserId);
         if (card == null) {
