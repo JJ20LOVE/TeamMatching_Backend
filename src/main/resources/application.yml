@@ -24,7 +24,7 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-  
+
   # 邮件配置
   mail:
     enabled: ${MAIL_ENABLED:true}
@@ -42,7 +42,7 @@ spring:
           ssl:
             enable: true
 
-  
+
   # Redis配置
   data:
     redis:
@@ -51,6 +51,13 @@ spring:
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DATABASE:0}
       timeout: ${REDIS_TIMEOUT:2000ms}
+      lettuce:
+        pool:
+          enabled: true
+          max-active: ${REDIS_POOL_MAX_ACTIVE:16}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:4}
+          max-wait: ${REDIS_POOL_MAX_WAIT:-1ms}
 
 # 自定义应用配置
 app:

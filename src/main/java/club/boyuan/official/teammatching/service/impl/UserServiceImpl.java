@@ -2,6 +2,8 @@ package club.boyuan.official.teammatching.service.impl;
 
 import club.boyuan.official.teammatching.common.utils.SecurityUtils;
 import club.boyuan.official.teammatching.dto.request.user.AddSkillCertRequest;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import club.boyuan.official.teammatching.dto.request.user.UpdateNotificationSettingsRequest;
 import club.boyuan.official.teammatching.dto.request.user.UpdateProfileRequest;
 import club.boyuan.official.teammatching.dto.response.user.AddSkillCertResponse;
@@ -50,6 +52,7 @@ public class UserServiceImpl implements UserService {
     private SimpMessagingTemplate messagingTemplate;
     
     @Override
+    @Cacheable(cacheNames = "userProfile", key = "#userId", unless = "#result == null")
     public UserProfileResponse getUserProfile(Integer userId) {
         log.info("开始获取用户资料，userId: {}", userId);
         
@@ -88,6 +91,7 @@ public class UserServiceImpl implements UserService {
     
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "userProfile", key = "#userId")
     public void updateUserProfile(Integer userId, UpdateProfileRequest request) {
         log.info("开始更新用户资料，userId: {}", userId);
         
@@ -130,6 +134,7 @@ public class UserServiceImpl implements UserService {
     
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "userSkillCerts", key = "#userId")
     public AddSkillCertResponse addSkillCert(AddSkillCertRequest addSkillCertRequest, Integer userId) {
         log.info("开始添加技能认证，userId: {}, skillName: {}", userId, addSkillCertRequest.getSkillName());
         
@@ -181,6 +186,7 @@ public class UserServiceImpl implements UserService {
     }
     
     @Override
+    @Cacheable(cacheNames = "userSkillCerts", key = "#userId", unless = "#result == null || #result.isEmpty()")
     public java.util.List<SkillCertInfoResponse> getSkillCertList(Integer userId) {
         log.info("开始获取用户技能认证列表，userId: {}", userId);
         
@@ -232,6 +238,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Cacheable(cacheNames = "userNotificationSettings", key = "#userId", unless = "#result == null")
     public NotificationSettingsResponse getNotificationSettings(Integer userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
@@ -247,6 +254,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = "userNotificationSettings", key = "#userId")
     public NotificationSettingsSavedResponse updateNotificationSettings(Integer userId, UpdateNotificationSettingsRequest request) {
         if (request.getMessageNotify() == null && request.getProjectUpdateNotify() == null
                 && request.getInvitationNotify() == null && request.getSystemNotify() == null) {

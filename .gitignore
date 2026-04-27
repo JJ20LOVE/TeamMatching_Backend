@@ -41,6 +41,20 @@ build/
 **/application-local.yml
 **/application-local.properties
 
-### Test Data
+### Temp Files
+temp/
+
+### Test Data & Scripts
 test_data.sql
 insert_test_data.sql
+scripts/
+
+### Local Run Artifacts
+start-cache-test.ps1
+test-cache.ps1
+backend-output.log
+backend-error.log
+
+### IDE
+.idea/
+*.iml

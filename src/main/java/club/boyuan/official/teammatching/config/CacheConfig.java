@@ -17,14 +17,15 @@ import java.time.Duration;
 public class CacheConfig {
 
     /**
-     * 智能匹配结果缓存：
+     * 智能匹配结果缓存（本地缓存，作为 Redis 缓存的一级缓存补充）：
      * - key: userId
      * - TTL: 60s（保证足够新鲜，避免频繁打分计算）
      * - maxSize: 5000（按用户量/并发可调整）
+     * 注意：RedisConfig 中的 RedisCacheManager 为 @Primary 主缓存管理器，
+     * 此 Caffeine 缓存仅用于特定场景（如高频本地访问）。
      */
-    @Bean
-    @Primary
-    public CacheManager cacheManager() {
+    @Bean("caffeineCacheManager")
+    public CacheManager caffeineCacheManager() {
         CaffeineCacheManager manager = new CaffeineCacheManager();
         manager.setCacheNames(java.util.List.of("projectMatch"));
         manager.setCaffeine(Caffeine.newBuilder()

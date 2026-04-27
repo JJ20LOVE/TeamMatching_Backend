@@ -3,6 +3,7 @@ package club.boyuan.official.teammatching.service.impl;
 import club.boyuan.official.teammatching.common.enums.ApplicationResultEnum;
 import club.boyuan.official.teammatching.common.enums.ProjectStatusEnum;
 import club.boyuan.official.teammatching.dto.request.project.ApplyProjectRequest;
+import club.boyuan.official.teammatching.dto.request.project.ProjectQueryRequest;
 import club.boyuan.official.teammatching.dto.request.project.CreateProjectRequest;
 import club.boyuan.official.teammatching.dto.request.project.ProjectQueryRequest;
 import club.boyuan.official.teammatching.dto.request.project.UpdateProjectRequest;
@@ -40,7 +41,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,7 +77,7 @@ public class ProjectServiceImpl implements ProjectService {
     
     @Override
     @Transactional(rollbackFor = Exception.class)
-    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
+    @CacheEvict(cacheNames = {"projectList", "projectMatch"}, allEntries = true)
     public Integer createProject(Integer userId, CreateProjectRequest request) {
         log.info("创建项目，userId: {}, 项目名称：{}", userId, request.getName());
         
@@ -129,7 +132,7 @@ public class ProjectServiceImpl implements ProjectService {
     
     @Override
     @Transactional(rollbackFor = Exception.class)
-    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
+    @CacheEvict(cacheNames = {"projectList", "projectDetail", "projectMatch"}, allEntries = true)
     public void updateProject(Integer projectId, Integer userId, UpdateProjectRequest request) {
         log.info("更新项目，projectId: {}, userId: {}", projectId, userId);
         
@@ -219,6 +222,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
     
     @Override
+    @Cacheable(cacheNames = "projectDetail", key = "#projectId + ':' + #currentUserId", unless = "#result == null")
     public ProjectDetailResponse getProjectDetail(Integer projectId, Integer currentUserId) {
         log.info("获取项目详情，projectId: {}, currentUserId: {}", projectId, currentUserId);
         
@@ -355,6 +359,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Cacheable(cacheNames = "projectList", key = "'myPublish:' + #userId + ':' + #status + ':' + #auditStatus + ':' + #page + ':' + #size", unless = "#result == null || #result.isEmpty()")
     public List<ProjectCardResponse> getMyPublishedProjects(Integer userId,
                                                             Integer status,
                                                             Integer auditStatus,
@@ -440,7 +445,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
+    @CacheEvict(cacheNames = {"projectDetail", "projectMatch"}, allEntries = true)
     public ApplyProjectResponse applyProject(Integer projectId, Integer userId, ApplyProjectRequest request) {
         log.info("申请加入项目，projectId: {}, userId: {}, requirementId: {}",
                 projectId, userId, request.getRequirementId());
@@ -733,7 +738,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    @CacheEvict(cacheNames = "projectMatch", allEntries = true)
+    @CacheEvict(cacheNames = {"projectList", "projectDetail", "projectStats", "projectMatch"}, allEntries = true)
     public void updateProjectStatus(Integer projectId, Integer userId, Integer status) {
         log.info("更新项目状态，projectId: {}, userId: {}, status: {}", projectId, userId, status);
 
@@ -756,6 +761,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Cacheable(cacheNames = "projectStats", key = "#projectId", unless = "#result == null")
     public Map<String, Object> getProjectStats(Integer projectId) {
         log.info("获取项目统计数据，projectId: {}", projectId);
 
@@ -776,6 +782,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Cacheable(cacheNames = "projectList", key = "'list:' + #request.hashCode() + ':' + #currentUserId", unless = "#result == null || #result.isEmpty()")
     public List<ProjectListResponse> getProjectList(ProjectQueryRequest request, Integer currentUserId) {
         log.info("获取项目列表，request: {}, currentUserId: {}", request, currentUserId);
 
@@ -866,6 +873,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(cacheNames = {"projectDetail", "projectList"}, allEntries = true)
     public boolean toggleFavoriteProject(Integer projectId, Integer userId) {
         log.info("切换项目收藏状态，projectId: {}, userId: {}", projectId, userId);
 
@@ -944,6 +952,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Cacheable(cacheNames = "projectList", key = "'similar:' + #projectId + ':' + #currentUserId", unless = "#result == null || #result.isEmpty()")
     public List<ProjectListResponse> getSimilarProjects(Integer projectId, Integer currentUserId) {
         log.info("获取相似项目，projectId: {}, currentUserId: {}", projectId, currentUserId);
 
