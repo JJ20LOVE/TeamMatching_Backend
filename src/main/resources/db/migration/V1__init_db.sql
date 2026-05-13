@@ -1,11 +1,3 @@
-DROP DATABASE IF EXISTS team_matching;
-CREATE DATABASE IF NOT EXISTS team_matching
-CHARACTER SET utf8mb4
-COLLATE utf8mb4_general_ci;
-
-USE team_matching;
-
-
 -- 1.1 技能标签表（不依赖其他表）
 DROP TABLE IF EXISTS skill_tag;
 CREATE TABLE skill_tag (

@@ -44,3 +44,4 @@ build/
 ### Test Data
 test_data.sql
 insert_test_data.sql
+V2__insert_test_data.sql

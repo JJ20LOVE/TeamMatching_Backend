@@ -115,10 +115,6 @@ jobs:
             set -e
             
             echo "📦 开始部署 TeamMatching..."
-            if [ ! -d /opt/teammatching ]; then
-              echo "❌ 目录 /opt/teammatching 不存在，请在服务器创建并放入 docker-compose.prod.yml、.env、init_db.sql"
-              exit 1
-            fi
             cd /opt/teammatching
             
             echo "⬇️  拉取最新Docker镜像..."
