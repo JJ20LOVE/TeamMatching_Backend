@@ -98,15 +98,26 @@ wechat:
     secret: your_wechat_secret
 ```
 
-#### 4. 初始化数据库
+#### 4. 数据库初始化与迁移
 
-创建数据库并导入 SQL 脚本：
+创建数据库：
 
 ```sql
 CREATE DATABASE team_matching DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE team_matching;
--- 导入表结构（需要创建 SQL 脚本）
 ```
+
+项目使用 Flyway 管理数据库版本迁移。
+所有数据库变更需通过新增 migration 文件完成：
+```text
+resources/db.migration/
+```
+
+命名格式：
+```text
+V{version}__{description}.sql
+```
+d
+请勿修改已提交的 migration 文件。
 
 #### 5. 编译运行
 
@@ -144,7 +155,8 @@ TeamMatching/
 ├── src/main/resources/
 │   ├── application.yml      # 主配置文件
 │   ├── application-dev.yml  # 开发环境配置
-│   └── application-prod.yml # 生产环境配置
+│   ├── application-prod.yml # 生产环境配置
+│   └── db.migration/        # Flyway 数据库版本迁移脚本
 └── pom.xml                  # Maven 配置
 ```
 
