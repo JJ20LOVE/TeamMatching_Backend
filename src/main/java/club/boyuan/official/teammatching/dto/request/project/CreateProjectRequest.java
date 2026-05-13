@@ -43,7 +43,10 @@ public class CreateProjectRequest {
     
     @ApiModelProperty(value = "项目标签（逗号分隔）", example = "AI，组队，校园")
     private String tags;
-    
+
+    @ApiModelProperty(value = "项目说明等附件文件 ID（先通过 /common/upload/file 上传，建议 targetType 与项目材料一致）", example = "10006")
+    private Long attachmentFileId;
+
     @ApiModelProperty(value = "是否允许跨专业申请", example = "true")
     private Boolean allowCrossMajor = false;
     

@@ -56,13 +56,15 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         boolean needAdmin = handlerMethod.hasMethodAnnotation(NeedAdmin.class)
                            || handlerMethod.getBeanType().isAnnotationPresent(NeedAdmin.class);
         
-        // 如果不需要认证，直接通过
+        String token = getTokenFromRequest(request);
+
+        // 公开接口：不强制登录，但若携带合法 Token 仍写入用户上下文（如项目详情 isFavored）
         if (!needLogin && !needAuth && !needAdmin) {
+            tryBindOptionalUserFromToken(token);
             return true;
         }
-        
-        // 获取Token
-        String token = getTokenFromRequest(request);
+
+        // 获取Token（强制认证接口）
         if (!StringUtils.hasText(token)) {
             throw new UnauthorizedException("未提供访问令牌");
         }
@@ -151,6 +153,36 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         }
         
         return null;
+    }
+
+    /**
+     * 公开接口可选登录：Token 合法且用户可用时设置上下文；失败或缺失则静默忽略（不抛异常）。
+     */
+    private void tryBindOptionalUserFromToken(String token) {
+        if (!StringUtils.hasText(token) || !JwtUtils.validateToken(token)) {
+            return;
+        }
+        Integer userId;
+        try {
+            userId = JwtUtils.getUserIdFromToken(token);
+        } catch (Exception e) {
+            log.debug("可选认证：解析 userId 失败，忽略");
+            return;
+        }
+        String tokenKey = String.format(AuthConstants.USER_JWT_TOKEN_KEY, userId);
+        String storedToken = (String) redisUtils.get(tokenKey);
+        if (!Objects.equals(storedToken, token)) {
+            return;
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return;
+        }
+        if (user.getStatus() == null || user.getStatus()) {
+            return;
+        }
+        UserContextUtil.setCurrentUser(user);
+        log.debug("公开接口可选认证成功: userId={}", userId);
     }
 
     private static boolean isAdmin(User user) {

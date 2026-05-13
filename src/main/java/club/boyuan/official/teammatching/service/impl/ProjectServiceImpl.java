@@ -9,8 +9,11 @@ import club.boyuan.official.teammatching.dto.request.project.UpdateProjectReques
 import club.boyuan.official.teammatching.dto.response.project.ProjectCardResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectDetailResponse;
 import club.boyuan.official.teammatching.dto.response.project.ApplyProjectResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyApplicationItemResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyReceivedApplicationItemResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectListResponse;
 import club.boyuan.official.teammatching.entity.ChatSession;
+import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.entity.Favorite;
 import club.boyuan.official.teammatching.entity.Follow;
 import club.boyuan.official.teammatching.entity.Project;
@@ -22,6 +25,7 @@ import club.boyuan.official.teammatching.exception.ResourceNotFoundException;
 import club.boyuan.official.teammatching.mapper.ProjectMapper;
 import club.boyuan.official.teammatching.mapper.ProjectRoleRequirementMapper;
 import club.boyuan.official.teammatching.mapper.ChatSessionMapper;
+import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.mapper.TeamApplicationMapper;
 import club.boyuan.official.teammatching.mapper.UserMapper;
 import club.boyuan.official.teammatching.mapper.FavoriteMapper;
@@ -66,6 +70,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final UserSkillRelationMapper userSkillRelationMapper;
     private final SkillTagMapper skillTagMapper;
     private final NotificationProducer notificationProducer;
+    private final FileResourceMapper fileResourceMapper;
     
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -94,7 +99,12 @@ public class ProjectServiceImpl implements ProjectService {
         project.setFavoriteCount(0);
         project.setApplyCount(0);
         project.setAuditStatus(1); // TODO: 后续完善审核逻辑
-        
+
+        if (request.getAttachmentFileId() != null) {
+            validateProjectAttachmentForPublisher(request.getAttachmentFileId(), userId);
+            project.setAttachmentFileId(request.getAttachmentFileId());
+        }
+
         projectMapper.insert(project);
         
         // 2. 创建角色要求
@@ -171,7 +181,15 @@ public class ProjectServiceImpl implements ProjectService {
         if (request.getStatus() != null) {
             project.setStatus(request.getStatus());
         }
-        
+        if (request.getAttachmentFileId() != null) {
+            if (request.getAttachmentFileId() == 0L) {
+                project.setAttachmentFileId(null);
+            } else {
+                validateProjectAttachmentForPublisher(request.getAttachmentFileId(), userId);
+                project.setAttachmentFileId(request.getAttachmentFileId());
+            }
+        }
+
         project.setUpdateTime(LocalDateTime.now());
         projectMapper.updateById(project);
         
@@ -273,9 +291,69 @@ public class ProjectServiceImpl implements ProjectService {
         
         response.setRoleRequirements(roleResponses);
         
+        // 6. 设置当前用户是否已收藏该项目
+        if (currentUserId != null) {
+            LambdaQueryWrapper<Favorite> favoriteWrapper = new LambdaQueryWrapper<>();
+            favoriteWrapper.eq(Favorite::getUserId, currentUserId)
+                    .eq(Favorite::getTargetType, 1)  // 1-项目
+                    .eq(Favorite::getTargetId, projectId);
+            Long count = favoriteMapper.selectCount(favoriteWrapper);
+            response.setIsFavored(count != null && count > 0);
+        } else {
+            // 未登录用户默认为 false
+            response.setIsFavored(false);
+        }
+
+        response.setHasApplied(hasUserAppliedToProject(currentUserId, projectId));
+
+        fillProjectAttachmentFields(project, response);
+
         return response;
     }
-    
+
+    private void validateProjectAttachmentForPublisher(Long fileId, Integer publisherUserId) {
+        FileResource fr = fileResourceMapper.selectById(fileId);
+        if (fr == null || Boolean.TRUE.equals(fr.getIsDeleted())) {
+            throw new BusinessException("附件不存在或已删除");
+        }
+        if (!Objects.equals(fr.getUserId(), publisherUserId)) {
+            throw new BusinessException("附件须为当前用户本人上传的文件");
+        }
+    }
+
+    private void fillProjectAttachmentFields(Project project, ProjectDetailResponse response) {
+        Long fid = project.getAttachmentFileId();
+        if (fid == null) {
+            response.setAttachmentFileId(null);
+            response.setAttachmentFileName(null);
+            response.setAttachmentFileUrl(null);
+            return;
+        }
+        FileResource fr = fileResourceMapper.selectById(fid);
+        response.setAttachmentFileId(fid);
+        if (fr == null || Boolean.TRUE.equals(fr.getIsDeleted())) {
+            response.setAttachmentFileName(null);
+            response.setAttachmentFileUrl(null);
+            return;
+        }
+        response.setAttachmentFileName(fr.getFileName());
+        response.setAttachmentFileUrl(fr.getFileUrl());
+    }
+
+    /**
+     * 当前用户是否对该 projectId 存在任意一条投递（与列表 hasApplied 语义一致）
+     */
+    private boolean hasUserAppliedToProject(Integer userId, Integer projectId) {
+        if (userId == null || projectId == null) {
+            return false;
+        }
+        LambdaQueryWrapper<TeamApplication> w = new LambdaQueryWrapper<>();
+        w.eq(TeamApplication::getApplicantUserId, userId)
+                .eq(TeamApplication::getProjectId, projectId);
+        Long count = teamApplicationMapper.selectCount(w);
+        return count != null && count > 0;
+    }
+
     @Override
     public List<ProjectCardResponse> getMyPublishedProjects(Integer userId,
                                                             Integer status,
@@ -472,6 +550,188 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public List<MyApplicationItemResponse> listMyApplications(Integer userId, Integer page, Integer size) {
+        long current = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long pageSize = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (current < 1) {
+            current = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+
+        LambdaQueryWrapper<TeamApplication> appWrapper = new LambdaQueryWrapper<>();
+        appWrapper.eq(TeamApplication::getApplicantUserId, userId)
+                .orderByDesc(TeamApplication::getApplyTime);
+
+        Page<TeamApplication> appPage = new Page<>(current, pageSize);
+        Page<TeamApplication> paged = teamApplicationMapper.selectPage(appPage, appWrapper);
+        List<TeamApplication> applications = paged.getRecords();
+        if (applications == null || applications.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Integer> projectIds = applications.stream()
+                .map(TeamApplication::getProjectId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Integer, Project> projectMap = new HashMap<>();
+        if (!projectIds.isEmpty()) {
+            for (Project p : projectMapper.selectBatchIds(projectIds)) {
+                if (p != null) {
+                    projectMap.put(p.getProjectId(), p);
+                }
+            }
+        }
+
+        List<ChatSession> sessions = Collections.emptyList();
+        if (!projectIds.isEmpty()) {
+            LambdaQueryWrapper<ChatSession> sessionWrapper = new LambdaQueryWrapper<>();
+            sessionWrapper.in(ChatSession::getProjectId, projectIds)
+                    .and(w -> w.eq(ChatSession::getUser1Id, userId).or().eq(ChatSession::getUser2Id, userId));
+            sessions = chatSessionMapper.selectList(sessionWrapper);
+        }
+
+        Map<Integer, Integer> projectToSessionId = new HashMap<>();
+        for (ChatSession s : sessions) {
+            if (s == null || s.getProjectId() == null) {
+                continue;
+            }
+            Project p = projectMap.get(s.getProjectId());
+            if (p == null || p.getPublisherUserId() == null) {
+                continue;
+            }
+            Integer pub = p.getPublisherUserId();
+            boolean pair = (Objects.equals(s.getUser1Id(), userId) && Objects.equals(s.getUser2Id(), pub))
+                    || (Objects.equals(s.getUser2Id(), userId) && Objects.equals(s.getUser1Id(), pub));
+            if (pair) {
+                projectToSessionId.putIfAbsent(s.getProjectId(), s.getSessionId());
+            }
+        }
+
+        List<MyApplicationItemResponse> out = new ArrayList<>();
+        for (TeamApplication app : applications) {
+            MyApplicationItemResponse row = new MyApplicationItemResponse();
+            row.setApplicationId(app.getApplicationId());
+            row.setProjectId(app.getProjectId());
+            Project p = projectMap.get(app.getProjectId());
+            if (p != null) {
+                row.setProjectName(p.getName());
+                row.setBelongTrack(p.getBelongTrack());
+                row.setProjectStatus(p.getStatus());
+            }
+            row.setRole(app.getRole());
+            row.setRequirementId(app.getRequirementId());
+            row.setResult(app.getResult());
+            row.setApplyTime(app.getApplyTime());
+            row.setAuditTime(app.getAuditTime());
+            row.setRemark(app.getRemark());
+            row.setSessionId(projectToSessionId.get(app.getProjectId()));
+            out.add(row);
+        }
+        return out;
+    }
+
+    @Override
+    public List<MyReceivedApplicationItemResponse> listMyReceivedApplications(Integer userId, Integer page, Integer size) {
+        long current = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long pageSize = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (current < 1) {
+            current = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+
+        List<Project> ownedProjects = projectMapper.selectList(
+                new LambdaQueryWrapper<Project>()
+                        .eq(Project::getPublisherUserId, userId)
+                        .select(Project::getProjectId, Project::getName, Project::getStatus));
+        if (ownedProjects == null || ownedProjects.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Map<Integer, Project> projectMap = ownedProjects.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(Project::getProjectId, p -> p, (a, b) -> a));
+        List<Integer> projectIds = new ArrayList<>(projectMap.keySet());
+        if (projectIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<TeamApplication> appWrapper = new LambdaQueryWrapper<>();
+        appWrapper.in(TeamApplication::getProjectId, projectIds)
+                .orderByDesc(TeamApplication::getApplyTime, TeamApplication::getApplicationId);
+
+        Page<TeamApplication> appPage = new Page<>(current, pageSize);
+        List<TeamApplication> applications = teamApplicationMapper.selectPage(appPage, appWrapper).getRecords();
+        if (applications == null || applications.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Integer> applicantIds = applications.stream()
+                .map(TeamApplication::getApplicantUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Integer, User> applicantMap = new HashMap<>();
+        if (!applicantIds.isEmpty()) {
+            List<User> applicants = userMapper.selectBatchIds(applicantIds);
+            applicantMap = applicants.stream().collect(Collectors.toMap(User::getUserId, u -> u, (a, b) -> a));
+        }
+
+        LambdaQueryWrapper<ChatSession> sessionWrapper = new LambdaQueryWrapper<>();
+        sessionWrapper.in(ChatSession::getProjectId, projectIds)
+                .and(w -> w.eq(ChatSession::getUser1Id, userId).or().eq(ChatSession::getUser2Id, userId));
+        List<ChatSession> sessions = chatSessionMapper.selectList(sessionWrapper);
+        Map<String, Integer> sessionMap = new HashMap<>();
+        for (ChatSession s : sessions) {
+            if (s == null || s.getProjectId() == null || s.getSessionId() == null) {
+                continue;
+            }
+            String key1 = s.getProjectId() + ":" + s.getUser1Id() + ":" + s.getUser2Id();
+            String key2 = s.getProjectId() + ":" + s.getUser2Id() + ":" + s.getUser1Id();
+            sessionMap.putIfAbsent(key1, s.getSessionId());
+            sessionMap.putIfAbsent(key2, s.getSessionId());
+        }
+
+        List<MyReceivedApplicationItemResponse> out = new ArrayList<>();
+        for (TeamApplication app : applications) {
+            MyReceivedApplicationItemResponse row = new MyReceivedApplicationItemResponse();
+            row.setApplicationId(app.getApplicationId());
+            row.setProjectId(app.getProjectId());
+            Project project = projectMap.get(app.getProjectId());
+            if (project != null) {
+                row.setProjectName(project.getName());
+                row.setProjectStatus(project.getStatus());
+            }
+
+            Integer applicantId = app.getApplicantUserId();
+            row.setApplicantUserId(applicantId);
+            User applicant = applicantMap.get(applicantId);
+            if (applicant != null) {
+                row.setApplicantNickname(applicant.getNickname());
+                row.setApplicantAvatar(applicant.getAvatarFileId() != null ? applicant.getAvatarFileId().toString() : null);
+            }
+
+            row.setRole(app.getRole());
+            row.setRequirementId(app.getRequirementId());
+            row.setApplyReason(app.getApplyReason());
+            row.setResult(app.getResult());
+            row.setApplyTime(app.getApplyTime());
+            row.setAuditTime(app.getAuditTime());
+            row.setRemark(app.getRemark());
+            row.setCustomResumeFileId(app.getCustomResumeFileId());
+            row.setApplicationAttachmentFileId(app.getApplicationAttachmentFileId());
+            row.setSessionId(sessionMap.get(app.getProjectId() + ":" + userId + ":" + applicantId));
+            out.add(row);
+        }
+        return out;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     @CacheEvict(cacheNames = "projectMatch", allEntries = true)
     public void updateProjectStatus(Integer projectId, Integer userId, Integer status) {
@@ -516,8 +776,8 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<ProjectListResponse> getProjectList(ProjectQueryRequest request) {
-        log.info("获取项目列表，request: {}", request);
+    public List<ProjectListResponse> getProjectList(ProjectQueryRequest request, Integer currentUserId) {
+        log.info("获取项目列表，request: {}, currentUserId: {}", request, currentUserId);
 
         LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<>();
 
@@ -555,7 +815,53 @@ public class ProjectServiceImpl implements ProjectService {
             return new ArrayList<>();
         }
 
-        return buildProjectListResponses(projects);
+        return buildProjectListResponses(projects, currentUserId);
+    }
+
+    @Override
+    public List<ProjectListResponse> listMyFavoriteProjects(Integer userId, Integer page, Integer size) {
+        long current = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long pageSize = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (current < 1) {
+            current = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+
+        LambdaQueryWrapper<Favorite> favWrapper = new LambdaQueryWrapper<>();
+        favWrapper.eq(Favorite::getUserId, userId)
+                .eq(Favorite::getTargetType, 1)
+                .orderByDesc(Favorite::getCreatedTime);
+
+        Page<Favorite> favPage = new Page<>(current, pageSize);
+        Page<Favorite> paged = favoriteMapper.selectPage(favPage, favWrapper);
+        List<Favorite> favorites = paged.getRecords();
+        if (favorites == null || favorites.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Integer> projectIds = favorites.stream()
+                .map(Favorite::getTargetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (projectIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Project> loaded = projectMapper.selectBatchIds(projectIds);
+        Map<Integer, Project> byId = loaded.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(Project::getProjectId, pr -> pr, (a, b) -> a));
+
+        List<Project> ordered = new ArrayList<>();
+        for (Integer pid : projectIds) {
+            Project pr = byId.get(pid);
+            if (pr != null) {
+                ordered.add(pr);
+            }
+        }
+        return buildProjectListResponses(ordered, userId);
     }
 
     @Override
@@ -638,8 +944,8 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<ProjectListResponse> getSimilarProjects(Integer projectId) {
-        log.info("获取相似项目，projectId: {}", projectId);
+    public List<ProjectListResponse> getSimilarProjects(Integer projectId, Integer currentUserId) {
+        log.info("获取相似项目，projectId: {}, currentUserId: {}", projectId, currentUserId);
 
         Project project = projectMapper.selectById(projectId);
         if (project == null) {
@@ -653,7 +959,7 @@ public class ProjectServiceImpl implements ProjectService {
         wrapper.orderByDesc(Project::getViewCount);
 
         List<Project> projects = projectMapper.selectList(wrapper);
-        return buildProjectListResponses(projects);
+        return buildProjectListResponses(projects, currentUserId);
     }
 
     @Override
@@ -704,7 +1010,7 @@ public class ProjectServiceImpl implements ProjectService {
         int limit = Math.min(30, scored.size());
         List<Project> topProjects = scored.subList(0, limit).stream().map(ScoredProject::project).toList();
 
-        return buildProjectListResponses(topProjects);
+        return buildProjectListResponses(topProjects, userId);
     }
 
     private List<Project> queryMatchedCandidates(boolean requireAuditApproved) {
@@ -991,7 +1297,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     private record ScoredProject(Project project, double score) { }
 
-    private List<ProjectListResponse> buildProjectListResponses(List<Project> projects) {
+    private List<ProjectListResponse> buildProjectListResponses(List<Project> projects, Integer currentUserId) {
         if (projects == null || projects.isEmpty()) {
             return new ArrayList<>();
         }
@@ -1021,6 +1327,18 @@ public class ProjectServiceImpl implements ProjectService {
         Map<Integer, List<ProjectRoleRequirements>> requirementsByProject = allRequirements.stream()
                 .collect(Collectors.groupingBy(ProjectRoleRequirements::getProjectId));
 
+        Set<Integer> appliedProjectIds = Collections.emptySet();
+        if (currentUserId != null && !projectIds.isEmpty()) {
+            LambdaQueryWrapper<TeamApplication> appWrapper = new LambdaQueryWrapper<>();
+            appWrapper.eq(TeamApplication::getApplicantUserId, currentUserId)
+                    .in(TeamApplication::getProjectId, projectIds);
+            List<TeamApplication> applications = teamApplicationMapper.selectList(appWrapper);
+            appliedProjectIds = applications.stream()
+                    .map(TeamApplication::getProjectId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+        }
+
         List<ProjectListResponse> result = new ArrayList<>();
 
         for (Project project : projects) {
@@ -1033,6 +1351,7 @@ public class ProjectServiceImpl implements ProjectService {
             item.setStatus(project.getStatus());
             item.setViewCount(project.getViewCount());
             item.setFavoriteCount(project.getFavoriteCount());
+            item.setHasApplied(currentUserId != null && appliedProjectIds.contains(project.getProjectId()));
 
             // 发布人信息
             User publisher = userMap.get(project.getPublisherUserId());

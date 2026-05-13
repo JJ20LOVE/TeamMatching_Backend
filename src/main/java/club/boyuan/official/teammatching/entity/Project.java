@@ -56,6 +56,9 @@ public class Project implements Serializable {
     @ApiModelProperty(value = "项目标签（逗号分隔）")
     private String tags;
 
+    @ApiModelProperty(value = "项目说明等关联附件文件ID，关联 file_resource 表")
+    private Long attachmentFileId;
+
     @ApiModelProperty(value = "是否允许跨专业申请")
     private Boolean allowCrossMajorApplication;
 

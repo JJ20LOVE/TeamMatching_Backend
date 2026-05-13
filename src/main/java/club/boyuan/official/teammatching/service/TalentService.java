@@ -6,9 +6,11 @@ import club.boyuan.official.teammatching.dto.request.talent.TalentQueryRequest;
 import club.boyuan.official.teammatching.dto.request.talent.UpdateTalentStatusRequest;
 import club.boyuan.official.teammatching.dto.response.talent.TalentCardResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentDetailResponse;
+import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationListItemResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentPageResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentSaveResponse;
+import java.util.List;
 
 /**
  * 人才服务接口
@@ -19,9 +21,15 @@ public interface TalentService {
 
     TalentDetailResponse getMyCard(Integer currentUserId);
 
+    TalentDetailResponse getCardDetail(Integer currentUserId, Integer cardId);
+
     TalentPageResponse<TalentCardResponse> listTalents(Integer currentUserId, TalentQueryRequest request);
 
     void updateVisibility(Integer currentUserId, UpdateTalentStatusRequest request);
 
     TalentInvitationResponse sendInvitation(Integer currentUserId, TalentInviteRequest request);
+
+    List<TalentInvitationListItemResponse> listSentInvitations(Integer currentUserId, Integer page, Integer size);
+
+    List<TalentInvitationListItemResponse> listReceivedInvitations(Integer currentUserId, Integer page, Integer size);
 }

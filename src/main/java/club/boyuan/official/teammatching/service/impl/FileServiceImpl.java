@@ -4,6 +4,7 @@ import club.boyuan.official.teammatching.common.constants.RedisConstants;
 import club.boyuan.official.teammatching.common.utils.UserContextUtil;
 import club.boyuan.official.teammatching.dto.response.file.FileInfoResponse;
 import club.boyuan.official.teammatching.dto.response.file.FileUploadResponse;
+import club.boyuan.official.teammatching.dto.response.file.MyUploadedFileItemResponse;
 import club.boyuan.official.teammatching.entity.User;
 import club.boyuan.official.teammatching.entity.FileResource;
 import club.boyuan.official.teammatching.exception.BusinessException;
@@ -11,6 +12,7 @@ import club.boyuan.official.teammatching.mapper.FileResourceMapper;
 import club.boyuan.official.teammatching.service.FileService;
 import club.boyuan.official.teammatching.common.utils.OssUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -21,10 +23,13 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 文件服务实现类
@@ -49,7 +54,54 @@ public class FileServiceImpl implements FileService {
      * 最大文件大小 50MB
      */
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024;
-    
+
+    /** 与上传接口 {@code /common/upload/file} 一致的 targetType 取值 */
+    private static final Set<Integer> ALLOWED_TARGET_TYPES = Set.of(1, 2, 3, 4, 5, 6, 7, 8);
+
+    @Override
+    public List<MyUploadedFileItemResponse> listMyUploadedFiles(Integer userId, Integer targetType, Integer page, Integer size) {
+        if (targetType == null || !ALLOWED_TARGET_TYPES.contains(targetType)) {
+            throw new BusinessException("targetType 无效，允许值：1-8");
+        }
+        long current = Optional.ofNullable(page).map(Integer::longValue).orElse(1L);
+        long pageSize = Optional.ofNullable(size).map(Integer::longValue).orElse(10L);
+        if (current < 1) {
+            current = 1;
+        }
+        if (pageSize < 1) {
+            pageSize = 10;
+        }
+
+        LambdaQueryWrapper<FileResource> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileResource::getUserId, userId)
+                .eq(FileResource::getTargetType, targetType)
+                .eq(FileResource::getIsDeleted, false)
+                .orderByDesc(FileResource::getCreatedTime);
+
+        Page<FileResource> pageParam = new Page<>(current, pageSize);
+        Page<FileResource> result = fileResourceMapper.selectPage(pageParam, wrapper);
+        List<FileResource> records = result.getRecords();
+        if (records == null || records.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return records.stream().map(this::toMyUploadedItem).collect(Collectors.toList());
+    }
+
+    private MyUploadedFileItemResponse toMyUploadedItem(FileResource fr) {
+        MyUploadedFileItemResponse item = new MyUploadedFileItemResponse();
+        item.setFileId(fr.getFileId());
+        item.setFileName(fr.getFileName());
+        item.setFileUrl(fr.getFileUrl());
+        item.setFileSize(fr.getFileSize());
+        item.setFileType(fr.getFileType());
+        item.setFileExtension(fr.getFileExtension());
+        item.setTargetType(fr.getTargetType());
+        if (fr.getCreatedTime() != null) {
+            item.setCreatedTime(fr.getCreatedTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
+        return item;
+    }
+
     @Override
     public FileUploadResponse uploadFile(MultipartFile file, Integer targetType, Boolean isTemp, Integer userId) {
         log.info("开始上传文件，文件名：{}, 大小：{}", file.getOriginalFilename(), file.getSize());
@@ -68,8 +120,31 @@ public class FileServiceImpl implements FileService {
         );
         
         if (existingFile != null) {
-            log.info("文件已存在，返回已有文件信息，fileId: {}", existingFile.getFileId());
-            return buildUploadResponse(existingFile);
+            // 复用已上传的物理文件，但为当前用户/targetType写一条新记录，避免“我的文件”查不到
+            FileResource reuseRecord = new FileResource();
+            reuseRecord.setFileName(file.getOriginalFilename());
+            reuseRecord.setFileKey(existingFile.getFileKey());
+            reuseRecord.setFileUrl(existingFile.getFileUrl());
+            reuseRecord.setFileSize(file.getSize());
+            reuseRecord.setFileType(file.getContentType());
+            reuseRecord.setFileExtension(getFileExtension(file));
+            reuseRecord.setMd5Hash(md5Hash);
+            reuseRecord.setUserId(userId);
+            reuseRecord.setTargetType(targetType);
+            reuseRecord.setTargetId(0);
+            reuseRecord.setIsTemp(isTemp != null ? isTemp : false);
+            reuseRecord.setIsDeleted(false);
+            reuseRecord.setCreatedTime(LocalDateTime.now());
+            reuseRecord.setUpdateTime(LocalDateTime.now());
+            fileResourceMapper.insert(reuseRecord);
+
+            if (Boolean.TRUE.equals(reuseRecord.getIsTemp())) {
+                schedulePhysicalDelete(reuseRecord.getFileId());
+            }
+
+            log.info("文件内容已存在，复用物理文件并创建新记录，newFileId: {}, reusedFileId: {}",
+                    reuseRecord.getFileId(), existingFile.getFileId());
+            return buildUploadResponse(reuseRecord);
         }
         
         // 4. 生成 OSS 对象名称

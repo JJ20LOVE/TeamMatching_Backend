@@ -7,6 +7,8 @@ import club.boyuan.official.teammatching.dto.request.project.ProjectQueryRequest
 import club.boyuan.official.teammatching.dto.response.project.ProjectDetailResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectCardResponse;
 import club.boyuan.official.teammatching.dto.response.project.ApplyProjectResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyApplicationItemResponse;
+import club.boyuan.official.teammatching.dto.response.project.MyReceivedApplicationItemResponse;
 import club.boyuan.official.teammatching.dto.response.project.ProjectListResponse;
 import club.boyuan.official.teammatching.entity.Project;
 
@@ -82,6 +84,24 @@ public interface ProjectService {
     ApplyProjectResponse applyProject(Integer projectId, Integer userId, ApplyProjectRequest request);
 
     /**
+     * 分页查询当前用户投递过的项目（按 team_application，含项目摘要与沟通会话 ID）
+     *
+     * @param userId 当前用户 ID
+     * @param page   页码，默认 1
+     * @param size   每页条数，默认 10
+     */
+    List<MyApplicationItemResponse> listMyApplications(Integer userId, Integer page, Integer size);
+
+    /**
+     * 分页查询当前用户收到的申请（项目发布者视角）
+     *
+     * @param userId 当前用户 ID
+     * @param page   页码，默认 1
+     * @param size   每页条数，默认 10
+     */
+    List<MyReceivedApplicationItemResponse> listMyReceivedApplications(Integer userId, Integer page, Integer size);
+
+    /**
      * 更新项目状态
      * @param projectId 项目 ID
      * @param userId    当前登录用户 ID
@@ -101,7 +121,17 @@ public interface ProjectService {
      * @param request 查询条件
      * @return 项目列表
      */
-    List<ProjectListResponse> getProjectList(ProjectQueryRequest request);
+    List<ProjectListResponse> getProjectList(ProjectQueryRequest request, Integer currentUserId);
+
+    /**
+     * 分页获取当前用户收藏的项目列表（与项目广场列表项结构一致）
+     *
+     * @param userId 当前登录用户 ID
+     * @param page   页码（可选，默认 1）
+     * @param size   每页条数（可选，默认 10）
+     * @return 项目列表项，按收藏时间倒序
+     */
+    List<ProjectListResponse> listMyFavoriteProjects(Integer userId, Integer page, Integer size);
 
     /**
      * 收藏/取消收藏项目（切换）
@@ -124,7 +154,7 @@ public interface ProjectService {
      * @param projectId 项目 ID
      * @return 相似项目列表
      */
-    List<ProjectListResponse> getSimilarProjects(Integer projectId);
+    List<ProjectListResponse> getSimilarProjects(Integer projectId, Integer currentUserId);
 
     /**
      * 智能匹配项目（基于用户画像的推荐）

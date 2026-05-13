@@ -10,6 +10,7 @@ import club.boyuan.official.teammatching.dto.request.talent.UpdateTalentStatusRe
 import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentCardResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentDetailResponse;
+import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationListItemResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentInvitationResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentPageResponse;
 import club.boyuan.official.teammatching.dto.response.talent.TalentSaveResponse;
@@ -25,15 +26,18 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
 
 /**
  * 人才相关控制器
  */
 @RestController
-@RequestMapping("/v1/talent")
+@RequestMapping("/talent")
 @RequiredArgsConstructor
 @Validated
 @Api(tags = "人才广场")
@@ -61,6 +65,16 @@ public class TalentController {
     public ResponseEntity<CommonResponse<TalentDetailResponse>> getMyCard() {
         Integer currentUserId = requireCurrentUserId();
         TalentDetailResponse response = talentService.getMyCard(currentUserId);
+        return ResponseEntity.ok(CommonResponse.ok(response));
+    }
+
+    @GetMapping("/card/{cardId}")
+    @NeedLogin
+    @ApiOperation(value = "获取人才卡片详情", notes = "根据 cardId 获取人才卡片详情")
+    public ResponseEntity<CommonResponse<TalentDetailResponse>> getCardDetail(
+            @PathVariable Integer cardId) {
+        Integer currentUserId = requireCurrentUserId();
+        TalentDetailResponse response = talentService.getCardDetail(currentUserId, cardId);
         return ResponseEntity.ok(CommonResponse.ok(response));
     }
 
@@ -92,6 +106,30 @@ public class TalentController {
             @Valid @RequestBody TalentInviteRequest request) {
         Integer currentUserId = requireCurrentUserId();
         TalentInvitationResponse response = talentService.sendInvitation(currentUserId, request);
+        return ResponseEntity.ok(CommonResponse.ok(response));
+    }
+
+    @GetMapping("/invitation/sent")
+    @NeedLogin
+    @NeedAuth
+    @ApiOperation(value = "获取我发送的邀请", notes = "人才广场-组队邀请中我发送的邀请列表")
+    public ResponseEntity<CommonResponse<List<TalentInvitationListItemResponse>>> listSentInvitations(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
+        Integer currentUserId = requireCurrentUserId();
+        List<TalentInvitationListItemResponse> response = talentService.listSentInvitations(currentUserId, page, size);
+        return ResponseEntity.ok(CommonResponse.ok(response));
+    }
+
+    @GetMapping("/invitation/received")
+    @NeedLogin
+    @NeedAuth
+    @ApiOperation(value = "获取我收到的邀请", notes = "人才广场-组队邀请中我收到的邀请列表")
+    public ResponseEntity<CommonResponse<List<TalentInvitationListItemResponse>>> listReceivedInvitations(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
+        Integer currentUserId = requireCurrentUserId();
+        List<TalentInvitationListItemResponse> response = talentService.listReceivedInvitations(currentUserId, page, size);
         return ResponseEntity.ok(CommonResponse.ok(response));
     }
 

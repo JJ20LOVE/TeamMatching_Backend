@@ -26,6 +26,8 @@ public class TalentInvitationResponse {
 
     private String invitationMessage;
 
+    private String contactInfo;
+
     private Integer status;
 
     private LocalDateTime sendTime;

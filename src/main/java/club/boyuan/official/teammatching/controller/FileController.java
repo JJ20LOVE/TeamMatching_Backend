@@ -5,6 +5,7 @@ import club.boyuan.official.teammatching.dto.response.CommonResponse;
 import club.boyuan.official.teammatching.dto.response.file.FileDeleteResponse;
 import club.boyuan.official.teammatching.dto.response.file.FileInfoResponse;
 import club.boyuan.official.teammatching.dto.response.file.FileUploadResponse;
+import club.boyuan.official.teammatching.dto.response.file.MyUploadedFileItemResponse;
 import club.boyuan.official.teammatching.entity.SkillTag;
 import club.boyuan.official.teammatching.exception.BusinessException;
 import club.boyuan.official.teammatching.mapper.SkillTagMapper;
@@ -76,7 +77,39 @@ public class FileController {
             throw new BusinessException("文件上传失败：" + e.getMessage());
         }
     }
-    
+
+    /**
+     * 分页查询当前用户上传的文件
+     */
+    @GetMapping("/file/my")
+    @ApiOperation(value = "分页查询当前用户上传的文件", notes = "按 targetType 查询本人已上传文件列表，与 /common/upload/file 的 targetType 含义一致（如 1 表示用户简历）")
+    @NeedLogin
+    public ResponseEntity<CommonResponse<List<MyUploadedFileItemResponse>>> listMyUploadedFiles(
+            @ApiParam(value = "关联类型：1-用户简历 2-技能认证证书 … 8-认证证明材料", required = true,
+                    allowableValues = "1,2,3,4,5,6,7,8")
+            @RequestParam("targetType") Integer targetType,
+            @ApiParam(value = "页码")
+            @RequestParam(value = "page", required = false) Integer page,
+            @ApiParam(value = "每页数量")
+            @RequestParam(value = "size", required = false) Integer size) {
+
+        log.info("分页查询我的上传文件，targetType={}, page={}, size={}", targetType, page, size);
+        try {
+            Integer userId = UserContextUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new BusinessException("用户未登录");
+            }
+            List<MyUploadedFileItemResponse> list = fileService.listMyUploadedFiles(userId, targetType, page, size);
+            return ResponseEntity.ok(CommonResponse.ok(list));
+        } catch (BusinessException e) {
+            log.error("查询我的上传文件失败：{}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("查询我的上传文件异常", e);
+            throw new BusinessException("查询失败：" + e.getMessage());
+        }
+    }
+
     /**
      * 获取技能标签列表
      * @return 技能标签列表
@@ -105,7 +138,7 @@ public class FileController {
      * @return 文件信息
      */
     @NeedLogin
-    @GetMapping("/file/{fileId}")
+    @GetMapping("/file/{fileId:\\d+}")
     @ApiOperation(value = "获取文件信息", notes = "根据文件ID获取文件详细信息")
     public ResponseEntity<CommonResponse<FileInfoResponse>> getFileInfo(
             @ApiParam(value = "文件ID", required = true)
@@ -132,7 +165,7 @@ public class FileController {
      * @param fileId 文件ID
      * @return 删除响应
      */
-    @DeleteMapping("/file/{fileId}")
+    @DeleteMapping("/file/{fileId:\\d+}")
     @ApiOperation(value = "删除文件", notes = "软删除文件")
     @NeedLogin
     public ResponseEntity<CommonResponse<FileDeleteResponse>> deleteFile(

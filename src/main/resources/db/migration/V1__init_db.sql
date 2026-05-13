@@ -60,6 +60,7 @@ CREATE TABLE user (
                       wechat_nickname VARCHAR(64) COMMENT '微信原始昵称',
                       phone VARCHAR(20) COMMENT '手机号，加密存储',
                       email VARCHAR(64) UNIQUE NOT NULL COMMENT '邮箱地址',
+                      contact_info VARCHAR(255) COMMENT '联系方式（邀请场景展示，如微信号）',
                       password VARCHAR(64) NOT NULL COMMENT '密码，加密存储（BCrypt）',
                       avatar_file_id BIGINT COMMENT '头像文件ID，关联file_resource表',
                       gender TINYINT DEFAULT 0 COMMENT '性别：0-未知 1-男 2-女',
@@ -127,6 +128,7 @@ CREATE TABLE project (
                          project_progress TEXT COMMENT '项目进展说明',
                          project_features TEXT COMMENT '项目特点/亮点',
                          tags VARCHAR(255) COMMENT '项目标签（逗号分隔）',
+                         attachment_file_id BIGINT NULL COMMENT '项目说明等关联附件，关联file_resource表',
                          allow_cross_major_application BOOLEAN DEFAULT TRUE COMMENT '是否允许跨专业申请',
 
                          publisher_user_id INT NOT NULL COMMENT '发布人ID，关联user表',
